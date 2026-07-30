@@ -55,7 +55,15 @@ export function analyzeSeaceWorkbook(buffer: Buffer, projectContext: string): Ex
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
   if (rows.length < 2) return null;
 
-  const headers = rows[0].map((h) => String(h ?? ""));
+  // Array.from (not .map) on purpose: a genuinely blank header cell in the
+  // source sheet ("...,MONEDA DEL MONTO,,FECHA DE FIRMA,...") leaves a hole
+  // in the row array rather than an explicit undefined entry, and .map()
+  // skips holes — findColumn's own .map() below would then skip that index
+  // too, but Array.prototype.findIndex does NOT skip holes, so it still
+  // invokes its callback there with a bare `undefined`, throwing on
+  // `.includes()`. Array.from visits every index and normalizes holes to
+  // undefined up front, so the header list stays fully dense.
+  const headers = Array.from(rows[0], (h) => String(h ?? ""));
   const objetoIdx = findColumn(headers, ["objeto", "descripcion", "detalle"]);
   const montoIdx = findColumn(headers, ["monto", "valor referencial", "importe"]);
   const entidadIdx = findColumn(headers, ["entidad", "convocante", "cliente"]);

@@ -102,10 +102,16 @@ export function interpretBasesIntegradas(text: string): RequerimientoInfo {
     result.montoAdjudicadoFuente = "Bases Integradas";
   }
 
+  // The bare "entidad[ \t:]*" fallback used to let its char class eat the
+  // space before a following qualifier word ("Entidad convocante :" with no
+  // value on the line), then capture that qualifier itself ("convocante :")
+  // as if it were the beneficiario — same bug as interpretReporteBuenaPro.
+  // Requiring an actual colon right after "entidad" keeps this to real
+  // "Entidad: X" lines.
   const beneficiario =
     captureLine(text, /beneficiario[ \t:]*([^\n]{3,150})/i) ??
-    captureLine(text, /entidad\s+(?:contratante|convocante)[ \t:]*([^\n]{3,150})/i) ??
-    captureLine(text, /(?:^|\n)\s*entidad[ \t:]*([^\n]{3,150})/i) ??
+    captureLine(text, /entidad\s+(?:contratante|convocante)[ \t]*:[ \t]*([^\n]{3,150})/i) ??
+    captureLine(text, /(?:^|\n)[ \t]*entidad[ \t]*:[ \t]*([^\n]{3,150})/i) ??
     captureLine(text, /convocad[oa]\s+por[ \t:]*([^\n]{3,150})/i);
   if (beneficiario) result.beneficiario = beneficiario;
 
@@ -147,9 +153,15 @@ export function interpretReporteBuenaPro(text: string): { montoAdjudicado?: numb
   // called the process), matching how it's used everywhere else — e.g. the
   // executive brief renders it as "convocado por {beneficiario}" — not the
   // winning bidder/contractor, which is AVLA's own client in this workflow.
+  // The bare "entidad[ \t:]*" fallback used to allow zero separator chars
+  // before capturing, so a label-only line like "Entidad convocante :" (real
+  // SEACE buena-pro exports serialize the table's labels and values in
+  // separate blocks, so the label is often followed by nothing at all) had
+  // its own trailing "convocante :" swallowed as if it were the value.
+  // Requiring an actual colon keeps this fallback to real "Entidad: X" lines.
   const beneficiario =
-    captureLine(text, /entidad\s+(?:contratante|convocante)[ \t:]*([^\n]{3,150})/i) ??
-    captureLine(text, /(?:^|\n)\s*entidad[ \t:]*([^\n]{3,150})/i) ??
+    captureLine(text, /entidad\s+(?:contratante|convocante)[ \t]*:[ \t]*([^\n]{3,150})/i) ??
+    captureLine(text, /(?:^|\n)[ \t]*entidad[ \t]*:[ \t]*([^\n]{3,150})/i) ??
     captureLine(text, /convocad[oa]\s+por[ \t:]*([^\n]{3,150})/i);
   if (beneficiario) result.beneficiario = beneficiario;
 

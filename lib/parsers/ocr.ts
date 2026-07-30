@@ -113,7 +113,14 @@ export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promis
         const page = doc.getPage(pageIndex);
         const image = await withTimeout<{ data: Uint8Array }>(
           page.render({
-            scale: 2,
+            // Scale 2 (~144dpi) reliably garbles small embedded content —
+            // e.g. a DNI card photographed and dropped onto an otherwise
+            // blank A4 page renders at a tiny effective pixel size, and
+            // Tesseract corrupts individual digits in dense text like the
+            // MRZ line. Scale 4 costs well under a second more per page
+            // (measured ~0.4s render + comparable OCR time) and reliably
+            // gets those digits right.
+            scale: 4,
             render: async (options: { data: Uint8Array; width: number; height: number }) =>
               sharpModule(options.data, { raw: { width: options.width, height: options.height, channels: 4 } })
                 .png()

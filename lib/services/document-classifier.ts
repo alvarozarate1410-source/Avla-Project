@@ -42,7 +42,18 @@ const RULES: Rule[] = [
     nombreCanonico: "F3_DJ_Patrimonial",
     contentKeywords: [/declaraci[oó]n\s+jurada.{0,25}patrimon/, "composicion accionaria", "declaracion jurada de bienes"],
   },
-  { tipo: "DNI", categoria: "cliente", nombreCanonico: "DNI_Representante_Legal", contentKeywords: ["documento nacional de identidad", "reniec"] },
+  {
+    tipo: "DNI",
+    categoria: "cliente",
+    nombreCanonico: "DNI_Representante_Legal",
+    // A DNI card is usually a small photo/graphic embedded on an otherwise
+    // blank scanned page, over a gradient security background — OCR mangles
+    // the stylized title text almost every time, regardless of render
+    // resolution. The machine-readable zone at the bottom, by contrast, is a
+    // plain monospace font and OCRs reliably; "I<PER" is the fixed ICAO
+    // document-type/country prefix for a Peruvian DNI's MRZ line 1.
+    contentKeywords: ["documento nacional de identidad", "reniec", /i\s*<\s*per\d{6,}/],
+  },
   {
     tipo: "DECLARACION_JURADA",
     categoria: "cliente",
@@ -59,7 +70,14 @@ const RULES: Rule[] = [
     tipo: "VIGENCIA_PODER",
     categoria: "cliente",
     nombreCanonico: "Vigencia_Poder",
-    contentKeywords: [/vigencia\s+de\s+poder/, "registro de personas juridicas", "poderes inscritos"],
+    // "registro de personas juridicas" used to be in this list, but it's
+    // boilerplate that shows up in almost any contract mentioning a legal
+    // rep's registered power ("...con poder inscrito en el registro de
+    // personas juridicas...") — that made real contracts tie with (and,
+    // by rule order, lose to) this rule. "certificado de vigencia" and
+    // "vigente el nombramiento" are SUNARP's actual certificate wording and
+    // don't show up outside a real vigencia-de-poder document.
+    contentKeywords: [/vigencia\s+de\s+poder/, "certificado de vigencia", /vigente\s+el\s+nombramiento/, "poderes inscritos"],
   },
   { tipo: "COPIA_LITERAL", categoria: "cliente", nombreCanonico: "Copia_Literal", contentKeywords: [/copia\s+literal/, "partida registral"] },
   {
@@ -72,7 +90,22 @@ const RULES: Rule[] = [
     tipo: "SOLICITUD_EMISION",
     categoria: "proyecto",
     nombreCanonico: "Solicitud_Emision",
-    contentKeywords: [/solicitud\s+de\s+emisi[oó]n/, "solicito la emision de la carta fianza", "carta fianza de fiel cumplimiento"],
+    // AVLA's own C1 form rarely spells out "solicitud de emisión" in its
+    // extracted text (that phrasing lives in the form's title/logo, not its
+    // body) — it's identified by its actual field labels instead. A
+    // broker's cover letter requesting the fianza is also a legitimate
+    // (if informal) instance of this document type, so its own phrasing is
+    // covered too.
+    contentKeywords: [
+      /solicitud\s+de\s+emisi[oó]n/,
+      "solicito la emision de la carta fianza",
+      "carta fianza de fiel cumplimiento",
+      "solicitud de carta fianza",
+      /solicit\w*\s+la\s+emisi[oó]n\s+de\s+(la|las)\s+cartas?\s+fianzas?/,
+      "datos del tomador",
+      "datos del asegurado",
+      "avla peru se obliga",
+    ],
   },
   {
     tipo: "BASES_INTEGRADAS",
@@ -97,7 +130,18 @@ const RULES: Rule[] = [
     tipo: "REPORTE_BUENA_PRO",
     categoria: "proyecto",
     nombreCanonico: "Reporte_Buena_Pro",
-    contentKeywords: ["reporte de buena pro", /otorgamiento\s+de\s+la\s+buena\s+pro/, /consentimiento\s+de\s+la\s+buena\s+pro/, "postor ganador"],
+    // Real SEACE-style exports title this "REPORTE DE OTORGAMIENTO DE BUENA
+    // PRO" — the literal "reporte de buena pro" keyword never matches that
+    // (it has "otorgamiento" spliced in), and the "de la buena pro" regex
+    // required an article ("la") that this real title doesn't have either,
+    // so the type fell through to a weaker BASES_INTEGRADAS match instead.
+    contentKeywords: [
+      "reporte de buena pro",
+      "reporte de otorgamiento de buena pro",
+      /otorgamiento\s+(de\s+)?(la\s+)?buena\s+pro/,
+      /consentimiento\s+(de\s+)?(la\s+)?buena\s+pro/,
+      "postor ganador",
+    ],
   },
   {
     tipo: "ACTA_BUENA_PRO",
@@ -123,9 +167,38 @@ const RULES: Rule[] = [
     nombreCanonico: "Contrato",
     // Deliberately avoid the bare word "contrato" (too generic, collides with
     // Contrato de Consorcio) — require it paired with entity/contractor language.
-    contentKeywords: [/contrato\s+de\s+(obra|ejecuci[oó]n\s+de\s+obra|servicio)/, "el contratista y la entidad", "orden de servicio", "contratista y la entidad contratante"],
+    // Real Peruvian state contracts follow a very consistent signing
+    // boilerplate ("en adelante LA ENTIDAD" / "EL CONTRATISTA", numbered
+    // "CLÁUSULA" sections) even when the specific "contrato de obra/servicio"
+    // phrasing isn't present verbatim — those anchors catch it too.
+    contentKeywords: [
+      /contrato\s+de\s+(obra|ejecuci[oó]n\s+de\s+obra|servicio)/,
+      "el contratista y la entidad",
+      "orden de servicio",
+      "contratista y la entidad contratante",
+      "conste por el presente documento",
+      "en adelante la entidad",
+      "en adelante el contratista",
+      "clausula primera",
+      "monto contractual",
+    ],
   },
-  { tipo: "CONSULTA_RUC", categoria: "validaciones", nombreCanonico: "Consulta_RUC", contentKeywords: [/consulta.{0,15}ruc/, "numero de ruc", "condicion del contribuyente"] },
+  {
+    tipo: "CONSULTA_RUC",
+    categoria: "validaciones",
+    nombreCanonico: "Consulta_RUC",
+    // A "Ficha RUC" (SUNAT's CIR / Constancia de Información Registrada
+    // export) is a different template from a "Consulta RUC" lookup page but
+    // the same underlying validation — brokers send either interchangeably.
+    contentKeywords: [
+      /consulta.{0,15}ruc/,
+      "numero de ruc",
+      "condicion del contribuyente",
+      "ficha ruc",
+      "constancia de informacion registrada",
+      "informacion general del contribuyente",
+    ],
+  },
   { tipo: "CONSULTA_DEUDA_COACTIVA", categoria: "validaciones", nombreCanonico: "Consulta_Deuda_Coactiva", contentKeywords: [/deuda\s+coactiva/, "cobranza coactiva"] },
   {
     tipo: "CONSULTA_PROVEEDORES_ESTADO",
@@ -133,7 +206,23 @@ const RULES: Rule[] = [
     nombreCanonico: "Proveedores_Estado_OSCE",
     contentKeywords: ["registro nacional de proveedores", "capitulo de bienes", "proveedores del estado", /\bosce\b/],
   },
-  { tipo: "EXPERIENCIA_SEACE", categoria: "validaciones", nombreCanonico: "Experiencia_SEACE", contentKeywords: [/\bseace\b/, "buscador de convocatorias"] },
+  {
+    tipo: "EXPERIENCIA_SEACE",
+    categoria: "validaciones",
+    nombreCanonico: "Experiencia_SEACE",
+    // Real broker contract-experience exports (from OSCE/SEACE-connected
+    // provider tools) often don't contain the literal word "SEACE" in their
+    // cell data at all — they're identified by their column headers instead
+    // ("OBJETO", "ENTIDAD", contract dates, consortium members).
+    contentKeywords: [
+      /\bseace\b/,
+      "buscador de convocatorias",
+      "fecha de firma de contrato",
+      "miembros consorcio",
+      "monto del contrato original",
+      "fecha prevista de fin de contrato",
+    ],
+  },
   { tipo: "REPORTE_EQUIFAX", categoria: "validaciones", nombreCanonico: "Reporte_Equifax", contentKeywords: [/\bequifax\b/, "score crediticio"] },
   {
     tipo: "SUSTENTO_PAGO",
