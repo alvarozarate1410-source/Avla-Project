@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "La nueva contraseña debe tener al menos 6 caracteres." }, { status: 400 });
   }
 
-  const user = findUser(session.username);
+  const user = await findUser(session.username);
   if (!user || !(await verifyPassword(user, currentPassword))) {
     return NextResponse.json({ error: "La contraseña actual no es correcta." }, { status: 401 });
   }

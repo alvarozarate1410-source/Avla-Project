@@ -1,5 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
+import { Redis } from "@upstash/redis";
 import bcrypt from "bcryptjs";
 
 export type Rol = "Ejecutivo Comercial" | "Practicante Comercial" | "Jefe Comercial";
@@ -21,81 +20,77 @@ function toPublicProfile(user: UserRecord): PublicProfile {
 }
 
 /**
- * There's no database yet, so this file is the "users table" for this
- * prototype. It's stored on disk (not just an in-memory Map) because
- * Next.js can serve requests from more than one worker thread/process
- * within the same run — a plain in-memory singleton isn't reliably shared
- * across all of them, which previously caused a just-registered user to be
- * invisible to some requests and trigger a login<->dashboard redirect loop.
- * Disk is the one thing every request handler in this container actually
- * shares. Swap for a real database before going further than a demo.
+ * There's no database yet, so a Redis store (Upstash, connected as a
+ * Vercel Marketplace "Redis" integration) is the "users table" for this
+ * prototype. This is not a stylistic choice — Vercel's serverless
+ * functions have a read-only filesystem outside of /tmp, and /tmp itself
+ * doesn't survive between invocations or across instances, so anything
+ * written to disk from a route handler is invisible to (or gone before)
+ * the next request. Redis is the one thing every invocation actually
+ * shares. Swap for a real relational database if this grows past a demo.
+ *
+ * Connect it in the Vercel dashboard: Project -> Storage -> Create Database
+ * -> Redis (Upstash). That auto-populates KV_REST_API_URL/KV_REST_API_TOKEN
+ * (legacy naming, still used by the integration) in Production/Preview/
+ * Development env vars. If you connected Upstash directly instead, it uses
+ * UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN — both are supported here.
+ * For local dev, run `vercel env pull .env.local` after connecting it so
+ * `next dev` talks to the same store.
  */
-const DATA_DIR = path.join(process.cwd(), ".data");
-const DATA_FILE = path.join(DATA_DIR, "users.json");
+// Built lazily (on first actual Redis call) rather than at module import
+// time: this file is imported from every page under the workspace layout,
+// including ones an unauthenticated visitor can reach, and we don't want a
+// missing env var to break page evaluation itself — only the specific
+// request that needed the user directory should fail, with a clear reason.
+const globalForRedis = globalThis as unknown as { __avlaRedis?: Redis };
 
-function loadFromDisk(): Map<string, UserRecord> {
-  try {
-    const raw = fs.readFileSync(DATA_FILE, "utf8");
-    const parsed = JSON.parse(raw) as UserRecord[];
-    return new Map(parsed.map((u) => [u.username, u]));
-  } catch {
-    return new Map();
+function getRedis(): Redis {
+  if (globalForRedis.__avlaRedis) return globalForRedis.__avlaRedis;
+
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) {
+    throw new Error(
+      "No Redis credentials found (expected KV_REST_API_URL/KV_REST_API_TOKEN or " +
+        "UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN). Connect a Redis database " +
+        "to this project in the Vercel dashboard (Storage -> Create Database -> Redis), " +
+        "or run `vercel env pull .env.local` for local development."
+    );
   }
+  const redis = new Redis({ url, token, enableAutoPipelining: false });
+  globalForRedis.__avlaRedis = redis;
+  return redis;
 }
 
-function saveToDisk(users: Map<string, UserRecord>) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmpFile = `${DATA_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tmpFile, JSON.stringify(Array.from(users.values()), null, 2));
-  fs.renameSync(tmpFile, DATA_FILE);
-}
-
-function seedIfEmpty(users: Map<string, UserRecord>) {
-  if (users.size > 0) return;
-  const demoHash = bcrypt.hashSync("avla2026", 10);
-  const now = new Date().toISOString();
-  users.set("diego.fernandez", {
-    username: "diego.fernandez",
-    passwordHash: demoHash,
-    nombre: "Diego Fernández",
-    rol: "Practicante Comercial",
-    avatarUrl: null,
-    createdAt: now,
-  });
-  users.set("mariana.torres", {
-    username: "mariana.torres",
-    passwordHash: demoHash,
-    nombre: "Mariana Torres",
-    rol: "Ejecutivo Comercial",
-    avatarUrl: null,
-    createdAt: now,
-  });
-  saveToDisk(users);
-}
+const userKey = (username: string) => `avla:user:${username}`;
 
 function normalizeUsername(username: string): string {
   return username.trim().toLowerCase();
 }
 
-/**
- * Every read goes back to disk so a user created by one worker is
- * immediately visible to the next request, no matter which worker handles
- * it. Reads are cheap (a small JSON file) so this trades a bit of I/O for
- * correctness in a prototype that has no real database to be consistent
- * through.
- */
-function readUsers(): Map<string, UserRecord> {
-  const users = loadFromDisk();
-  seedIfEmpty(users);
-  return users;
+let seeded = false;
+async function seedIfNeeded() {
+  if (seeded) return;
+  seeded = true;
+  const demoHash = bcrypt.hashSync("avla2026", 10);
+  const now = new Date().toISOString();
+  const demoUsers: UserRecord[] = [
+    { username: "diego.fernandez", passwordHash: demoHash, nombre: "Diego Fernández", rol: "Practicante Comercial", avatarUrl: null, createdAt: now },
+    { username: "mariana.torres", passwordHash: demoHash, nombre: "Mariana Torres", rol: "Ejecutivo Comercial", avatarUrl: null, createdAt: now },
+  ];
+  // NX = only set if absent, so this never clobbers a password someone
+  // actually changed on one of the demo accounts.
+  await Promise.all(demoUsers.map((u) => getRedis().set(userKey(u.username), u, { nx: true })));
 }
 
-export function findUser(username: string): UserRecord | undefined {
-  return readUsers().get(normalizeUsername(username));
+export async function findUser(username: string): Promise<UserRecord | undefined> {
+  await seedIfNeeded();
+  const user = await getRedis().get<UserRecord>(userKey(normalizeUsername(username)));
+  return user ?? undefined;
 }
 
-export function findPublicProfile(username: string): PublicProfile | undefined {
-  const user = findUser(username);
+export async function findPublicProfile(username: string): Promise<PublicProfile | undefined> {
+  const user = await findUser(username);
   return user ? toPublicProfile(user) : undefined;
 }
 
@@ -111,6 +106,7 @@ export interface CreateUserInput {
 }
 
 export async function createUser(input: CreateUserInput): Promise<PublicProfile> {
+  await seedIfNeeded();
   const username = normalizeUsername(input.username);
   const passwordHash = await bcrypt.hash(input.password, 10);
   const user: UserRecord = {
@@ -121,29 +117,25 @@ export async function createUser(input: CreateUserInput): Promise<PublicProfile>
     avatarUrl: null,
     createdAt: new Date().toISOString(),
   };
-  const users = readUsers();
-  users.set(username, user);
-  saveToDisk(users);
+  await getRedis().set(userKey(username), user);
   return toPublicProfile(user);
 }
 
-export function updateProfile(username: string, updates: { nombre?: string; avatarUrl?: string | null }): PublicProfile | undefined {
-  const users = readUsers();
-  const key = normalizeUsername(username);
-  const user = users.get(key);
+export async function updateProfile(username: string, updates: { nombre?: string; avatarUrl?: string | null }): Promise<PublicProfile | undefined> {
+  const key = userKey(normalizeUsername(username));
+  const user = await getRedis().get<UserRecord>(key);
   if (!user) return undefined;
   if (updates.nombre !== undefined && updates.nombre.trim()) user.nombre = updates.nombre.trim();
   if (updates.avatarUrl !== undefined) user.avatarUrl = updates.avatarUrl;
-  saveToDisk(users);
+  await getRedis().set(key, user);
   return toPublicProfile(user);
 }
 
 export async function updatePassword(username: string, newPassword: string): Promise<boolean> {
-  const users = readUsers();
-  const key = normalizeUsername(username);
-  const user = users.get(key);
+  const key = userKey(normalizeUsername(username));
+  const user = await getRedis().get<UserRecord>(key);
   if (!user) return false;
   user.passwordHash = await bcrypt.hash(newPassword, 10);
-  saveToDisk(users);
+  await getRedis().set(key, user);
   return true;
 }

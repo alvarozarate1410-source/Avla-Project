@@ -12,7 +12,7 @@ export default async function LoginPage() {
   // the profile actually exists — otherwise this page and the workspace
   // layout's own redirect-to-login would bounce the user back and forth
   // forever.
-  const profile = session ? findPublicProfile(session.username) : undefined;
+  const profile = session ? await findPublicProfile(session.username) : undefined;
 
   if (session && profile) redirect("/dashboard");
 

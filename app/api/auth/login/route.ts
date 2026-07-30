@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Usuario y contraseña son obligatorios." }, { status: 400 });
   }
 
-  const user = findUser(username);
+  const user = await findUser(username);
   const valid = user ? await verifyPassword(user, password) : false;
 
   if (!user || !valid) {

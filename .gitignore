@@ -37,9 +37,6 @@ yarn-error.log*
 # vercel
 .vercel
 
-# local prototype "database" (see lib/auth/users.ts)
-/.data/
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts

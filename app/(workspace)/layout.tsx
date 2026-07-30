@@ -8,7 +8,7 @@ import { findPublicProfile } from "@/lib/auth/users";
 export default async function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const session = verifySessionToken(cookieStore.get(SESSION_COOKIE)?.value);
-  const profile = session ? findPublicProfile(session.username) : undefined;
+  const profile = session ? await findPublicProfile(session.username) : undefined;
 
   if (!session || !profile) redirect("/login");
 

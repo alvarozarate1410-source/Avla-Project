@@ -20,7 +20,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "La imagen debe ser un archivo válido de menos de 1.5MB." }, { status: 400 });
   }
 
-  const profile = updateProfile(session.username, { nombre, avatarUrl });
+  const profile = await updateProfile(session.username, { nombre, avatarUrl });
   if (!profile) {
     return NextResponse.json({ error: "Usuario no encontrado." }, { status: 404 });
   }

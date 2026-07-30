@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   if (!password || password.length < 6) {
     return NextResponse.json({ error: "La contraseña debe tener al menos 6 caracteres." }, { status: 400 });
   }
-  if (findUser(username)) {
+  if (await findUser(username)) {
     return NextResponse.json({ error: "Ese usuario ya existe. Intenta con otro o inicia sesión." }, { status: 409 });
   }
 
