@@ -46,18 +46,18 @@ export const plantaAgua: Expediente = {
   ],
   checklist: [
     { id: "cliente", titulo: "Cliente", items: [
-      { id: "c1", label: "F1 - Ficha básica de cliente PJ", estado: "completo" },
-      { id: "c2", label: "DNI representante legal", estado: "completo" },
-      { id: "c3", label: "Vigencia Poder", estado: "completo" },
+      { id: "c1", label: "F1 - Ficha básica de cliente PJ", estado: "completo", tipoDetectado: "F1_FICHA_BASICA" },
+      { id: "c2", label: "DNI representante legal", estado: "completo", tipoDetectado: "DNI" },
+      { id: "c3", label: "Vigencia Poder", estado: "completo", tipoDetectado: "VIGENCIA_PODER" },
     ]},
     { id: "proyecto", titulo: "Proyecto", items: [
-      { id: "p1", label: "Bases Integradas", estado: "completo" },
-      { id: "p2", label: "Acta de Buena Pro", estado: "completo" },
+      { id: "p1", label: "Bases Integradas", estado: "completo", tipoDetectado: "BASES_INTEGRADAS" },
+      { id: "p2", label: "Acta de Buena Pro", estado: "completo", tipoDetectado: "ACTA_BUENA_PRO" },
     ]},
     { id: "consorcio", titulo: "Consorcio", items: [] },
     { id: "validaciones", titulo: "Validaciones Externas", items: [
-      { id: "v1", label: "Consulta RUC (SUNAT)", estado: "completo" },
-      { id: "v2", label: "Reporte Equifax", estado: "completo" },
+      { id: "v1", label: "Consulta RUC (SUNAT)", estado: "completo", tipoDetectado: "CONSULTA_RUC" },
+      { id: "v2", label: "Reporte Equifax", estado: "completo", tipoDetectado: "REPORTE_EQUIFAX" },
     ]},
   ],
   documentos: [
@@ -128,19 +128,19 @@ export const viaExpresa: Expediente = {
   ],
   checklist: [
     { id: "cliente", titulo: "Cliente", items: [
-      { id: "c1", label: "F1 - Ficha básica de cliente PJ", estado: "completo" },
-      { id: "c2", label: "Vigencia Poder", estado: "pendiente" },
-      { id: "c3", label: "EEFF Situacional", estado: "pendiente" },
+      { id: "c1", label: "F1 - Ficha básica de cliente PJ", estado: "completo", tipoDetectado: "F1_FICHA_BASICA" },
+      { id: "c2", label: "Vigencia Poder", estado: "pendiente", tipoDetectado: "VIGENCIA_PODER" },
+      { id: "c3", label: "EEFF Situacional", estado: "pendiente", tipoDetectado: "EEFF_SITUACIONAL" },
     ]},
     { id: "proyecto", titulo: "Proyecto", items: [
-      { id: "p1", label: "Bases Integradas", estado: "completo" },
+      { id: "p1", label: "Bases Integradas", estado: "completo", tipoDetectado: "BASES_INTEGRADAS" },
     ]},
     { id: "consorcio", titulo: "Consorcio", items: [
-      { id: "k1", label: "Contrato de Consorcio", estado: "pendiente" },
+      { id: "k1", label: "Contrato de Consorcio", estado: "pendiente", tipoDetectado: "CONTRATO_CONSORCIO" },
     ]},
     { id: "validaciones", titulo: "Validaciones Externas", items: [
-      { id: "v1", label: "Consulta RUC (SUNAT)", estado: "completo" },
-      { id: "v2", label: "Proveedores del Estado (OSCE)", estado: "advertencia", notas: "Sanción en apelación" },
+      { id: "v1", label: "Consulta RUC (SUNAT)", estado: "completo", tipoDetectado: "CONSULTA_RUC" },
+      { id: "v2", label: "Proveedores del Estado (OSCE)", estado: "advertencia", tipoDetectado: "CONSULTA_PROVEEDORES_ESTADO", notas: "Sanción en apelación" },
     ]},
   ],
   documentos: [
@@ -202,10 +202,10 @@ export const colegioSanMartin: Expediente = {
   },
   insights: [{ id: "i1", texto: "Expediente aprobado sin observaciones.", tono: "success" }],
   checklist: [
-    { id: "cliente", titulo: "Cliente", items: [{ id: "c1", label: "F1 - Ficha básica de cliente PJ", estado: "completo" }] },
-    { id: "proyecto", titulo: "Proyecto", items: [{ id: "p1", label: "Bases Integradas", estado: "completo" }] },
+    { id: "cliente", titulo: "Cliente", items: [{ id: "c1", label: "F1 - Ficha básica de cliente PJ", estado: "completo", tipoDetectado: "F1_FICHA_BASICA" }] },
+    { id: "proyecto", titulo: "Proyecto", items: [{ id: "p1", label: "Bases Integradas", estado: "completo", tipoDetectado: "BASES_INTEGRADAS" }] },
     { id: "consorcio", titulo: "Consorcio", items: [] },
-    { id: "validaciones", titulo: "Validaciones Externas", items: [{ id: "v1", label: "Consulta RUC (SUNAT)", estado: "completo" }] },
+    { id: "validaciones", titulo: "Validaciones Externas", items: [{ id: "v1", label: "Consulta RUC (SUNAT)", estado: "completo", tipoDetectado: "CONSULTA_RUC" }] },
   ],
   documentos: [],
   evidencias: [],

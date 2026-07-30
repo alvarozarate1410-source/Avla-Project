@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import type { ChatMessage } from "@/lib/types";
+import type { ChatMessage, Expediente } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const QUICK_PROMPTS = [
@@ -17,8 +17,8 @@ const QUICK_PROMPTS = [
   "¿Cuál es el representante?",
 ];
 
-export function ChatPanel({ expedienteId, initialMessages }: { expedienteId: string; initialMessages: ChatMessage[] }) {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+export function ChatPanel({ expediente }: { expediente: Expediente }) {
+  const [messages, setMessages] = useState<ChatMessage[]>(expediente.chat);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,7 +46,7 @@ export function ChatPanel({ expedienteId, initialMessages }: { expedienteId: str
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expedienteId, message: trimmed, history: nextMessages }),
+        body: JSON.stringify({ expedienteId: expediente.id, expediente, message: trimmed, history: nextMessages }),
       });
       const data = await res.json();
       const reply: ChatMessage = {
@@ -84,7 +84,7 @@ export function ChatPanel({ expedienteId, initialMessages }: { expedienteId: str
           variant="ghost"
           size="icon"
           aria-label="Nuevo chat"
-          onClick={() => setMessages(initialMessages.slice(0, 1))}
+          onClick={() => setMessages(expediente.chat.slice(0, 1))}
         >
           <RotateCcw className="h-3.5 w-3.5" />
         </Button>

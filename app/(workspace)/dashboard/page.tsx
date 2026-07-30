@@ -4,6 +4,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { Button } from "@/components/ui/button";
 import { StatTile } from "@/components/dashboard/stat-tile";
 import { ExpedienteCard } from "@/components/dashboard/expediente-card";
+import { UserGreeting } from "@/components/dashboard/user-greeting";
 import { expedientes } from "@/lib/mock-data";
 
 export default function DashboardPage() {
@@ -24,7 +25,7 @@ export default function DashboardPage() {
       <main className="noise-veil flex-1 px-6 py-8">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Hola, Diego 👋</h2>
+            <UserGreeting />
             <p className="mt-1 text-sm text-[var(--muted)]">
               Tienes {activos.length} expedientes activos. {criticos.length > 0 ? `${criticos.length} requieren atención.` : "Todo bajo control."}
             </p>

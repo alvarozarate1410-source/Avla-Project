@@ -18,7 +18,8 @@ import { ChatPanel } from "@/components/expediente/chat-panel";
 import { generateExpedienteReport } from "@/lib/services/report-generator";
 import type { Expediente } from "@/lib/types";
 
-export function ExpedienteDetailView({ expediente }: { expediente: Expediente }) {
+export function ExpedienteDetailView({ expediente: initialExpediente }: { expediente: Expediente }) {
+  const [expediente, setExpediente] = useState(initialExpediente);
   const [generating, setGenerating] = useState(false);
 
   async function handleGenerateReport() {
@@ -40,7 +41,7 @@ export function ExpedienteDetailView({ expediente }: { expediente: Expediente })
         </div>
       </Topbar>
 
-      <ExpedienteHeader expediente={expediente} onGenerateReport={handleGenerateReport} />
+      <ExpedienteHeader expediente={expediente} onGenerateReport={handleGenerateReport} onExpedienteChange={setExpediente} />
       {generating && (
         <div className="animate-shimmer h-0.5 w-full bg-gradient-to-r from-transparent via-[var(--brand)] to-transparent" />
       )}
@@ -76,7 +77,7 @@ export function ExpedienteDetailView({ expediente }: { expediente: Expediente })
             <InformacionExtraidaCard info={expediente.informacionExtraida} />
             <DocumentosListCard documentos={expediente.documentos} />
             <div className="sticky top-[88px]">
-              <ChatPanel expedienteId={expediente.id} initialMessages={expediente.chat} />
+              <ChatPanel expediente={expediente} />
             </div>
           </div>
         </div>

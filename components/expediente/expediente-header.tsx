@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AddEvidenceDialog } from "@/components/expediente/add-evidence-dialog";
 import type { Expediente } from "@/lib/types";
 import { estadoExpedienteConfig } from "@/lib/risk";
 import { formatDate } from "@/lib/utils";
@@ -19,9 +20,11 @@ import { formatDate } from "@/lib/utils";
 export function ExpedienteHeader({
   expediente,
   onGenerateReport,
+  onExpedienteChange,
 }: {
   expediente: Expediente;
   onGenerateReport: () => void;
+  onExpedienteChange: (updater: (prev: Expediente) => Expediente) => void;
 }) {
   const estadoCfg = estadoExpedienteConfig[expediente.estado];
 
@@ -63,6 +66,7 @@ export function ExpedienteHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          <AddEvidenceDialog expediente={expediente} onExpedienteChange={onExpedienteChange} />
           <Button variant="secondary" onClick={onGenerateReport}>
             <Download className="h-4 w-4" />
             Descargar reporte

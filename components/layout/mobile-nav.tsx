@@ -2,16 +2,31 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Menu, Plus, Sparkles } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Menu, Plus, Sparkles, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { NAV_ITEMS } from "@/lib/nav-items";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/components/layout/user-context";
+
+function initials(name: string) {
+  return name.split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+}
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const user = useUser();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setOpen(false);
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -34,7 +49,7 @@ export function MobileNav() {
             </Link>
           </Button>
         </div>
-        <nav className="flex flex-col gap-0.5 px-3">
+        <nav className="flex flex-1 flex-col gap-0.5 px-3">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href || pathname?.startsWith(item.href + "/");
             const Icon = item.icon;
@@ -56,6 +71,20 @@ export function MobileNav() {
             );
           })}
         </nav>
+        <div className="border-t border-[var(--border)] p-3">
+          <div className="flex items-center gap-3 px-1 py-1.5">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback>{initials(user.nombre)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium leading-tight">{user.nombre}</p>
+              <p className="truncate text-xs leading-tight text-[var(--muted)]">{user.rol}</p>
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Cerrar sesión">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

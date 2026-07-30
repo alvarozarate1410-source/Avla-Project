@@ -1,18 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Plus, PanelLeftClose, PanelLeft, Sparkles } from "lucide-react";
+import { Plus, PanelLeftClose, PanelLeft, Sparkles, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { NAV_ITEMS } from "@/lib/nav-items";
+import { useUser } from "@/components/layout/user-context";
+
+function initials(name: string) {
+  return name
+    .split(" ")
+    .map((s) => s[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const user = useUser();
   const [collapsed, setCollapsed] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   return (
     <aside
@@ -85,27 +117,30 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-auto flex flex-col gap-3 border-t border-[var(--border)] p-3">
-        {!collapsed && (
-          <div className="rounded-lg bg-[var(--surface-2)] p-3">
-            <div className="mb-2 flex items-center justify-between text-xs">
-              <span className="text-[var(--muted)]">Almacenamiento</span>
-              <span className="font-medium">128 de 500 GB</span>
-            </div>
-            <Progress value={25.6} className="h-1.5" />
-          </div>
-        )}
-        <div className="flex items-center gap-3 px-1">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback>DF</AvatarFallback>
-          </Avatar>
-          {!collapsed && (
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium leading-tight">Diego Fernández</p>
-              <p className="truncate text-xs leading-tight text-[var(--muted)]">Practicante Comercial</p>
-            </div>
-          )}
-        </div>
+      <div className="mt-auto border-t border-[var(--border)] p-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-[var(--surface-2)]">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback>{initials(user.nombre)}</AvatarFallback>
+              </Avatar>
+              {!collapsed && (
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium leading-tight">{user.nombre}</p>
+                  <p className="truncate text-xs leading-tight text-[var(--muted)]">{user.rol}</p>
+                </div>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="top" className="w-56">
+            <DropdownMenuLabel>{user.nombre}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout} disabled={loggingOut}>
+              <LogOut className="h-4 w-4" />
+              Cerrar sesión
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   );
