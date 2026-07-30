@@ -3,31 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import {
-  LayoutDashboard,
-  FolderKanban,
-  Users,
-  BarChart3,
-  LayoutTemplate,
-  Settings2,
-  Plus,
-  PanelLeftClose,
-  PanelLeft,
-  Sparkles,
-} from "lucide-react";
+import { Plus, PanelLeftClose, PanelLeft, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/expedientes", label: "Expedientes", icon: FolderKanban },
-  { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/reportes", label: "Reportes", icon: BarChart3 },
-  { href: "/plantillas", label: "Plantillas", icon: LayoutTemplate },
-  { href: "/configuracion", label: "Configuración", icon: Settings2 },
-];
+import { NAV_ITEMS } from "@/lib/nav-items";
 
 export function Sidebar() {
   const pathname = usePathname();

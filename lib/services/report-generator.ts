@@ -1,9 +1,16 @@
 import type { Expediente } from "@/lib/types";
+import { estadoExpedienteConfig } from "@/lib/risk";
 
 const BRAND = { r: 109, g: 94, b: 248 };
 const BRAND2 = { r: 79, g: 140, b: 255 };
 const INK = { r: 17, g: 19, b: 30 };
 const MUTED = { r: 110, g: 114, b: 132 };
+
+// jsPDF's standard fonts only support WinAnsi encoding — characters like "≤"
+// render as mojibake, so swap them for ASCII-safe equivalents before drawing.
+function pdfSafe(text: string) {
+  return text.replace(/≤/g, "<=").replace(/≥/g, ">=");
+}
 
 export async function generateExpedienteReport(expediente: Expediente) {
   const { jsPDF } = await import("jspdf");
@@ -36,7 +43,11 @@ export async function generateExpedienteReport(expediente: Expediente) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
   doc.setTextColor(MUTED.r, MUTED.g, MUTED.b);
-  doc.text(`Broker: ${expediente.broker}   ·   Ejecutivo: ${expediente.ejecutivo}   ·   Estado: ${expediente.estado}`, margin, y);
+  doc.text(
+    `Broker: ${expediente.broker}   ·   Ejecutivo: ${expediente.ejecutivo}   ·   Estado: ${estadoExpedienteConfig[expediente.estado].label}`,
+    margin,
+    y
+  );
 
   // Score badges
   y += 28;
@@ -70,7 +81,7 @@ export async function generateExpedienteReport(expediente: Expediente) {
   doc.setFontSize(9.5);
   doc.setTextColor(50, 52, 64);
   expediente.executiveBrief.parrafos.forEach((p) => {
-    const lines = doc.splitTextToSize(p, pageWidth - margin * 2);
+    const lines = doc.splitTextToSize(pdfSafe(p), pageWidth - margin * 2);
     doc.text(lines, margin, y);
     y += lines.length * 13 + 6;
   });
@@ -85,7 +96,7 @@ export async function generateExpedienteReport(expediente: Expediente) {
     startY: y,
     margin: { left: margin, right: margin },
     head: [["Factor", "Nivel", "Descripción"]],
-    body: expediente.riesgos.map((r) => [r.titulo, r.nivel.toUpperCase(), r.descripcion]),
+    body: expediente.riesgos.map((r) => [r.titulo, r.nivel.toUpperCase(), pdfSafe(r.descripcion)]),
     styles: { fontSize: 8.5, cellPadding: 6, textColor: [40, 42, 54] },
     headStyles: { fillColor: [BRAND.r, BRAND.g, BRAND.b], textColor: 255 },
     theme: "grid",
@@ -103,7 +114,11 @@ export async function generateExpedienteReport(expediente: Expediente) {
   doc.text("Checklist del expediente", margin, y);
   y += 8;
   const checklistRows = expediente.checklist.flatMap((b) =>
-    b.items.map((i) => [b.titulo, i.label, i.estado === "completo" ? "Completo" : i.estado === "pendiente" ? "Faltante" : "Advertencia"])
+    b.items.map((i) => [
+      b.titulo,
+      pdfSafe(i.label),
+      i.estado === "completo" ? "Completo" : i.estado === "pendiente" ? "Faltante" : "Advertencia",
+    ])
   );
   autoTable(doc, {
     startY: y,
@@ -130,7 +145,7 @@ export async function generateExpedienteReport(expediente: Expediente) {
     doc.setFontSize(9.5);
     doc.text(`Project Fit Score: ${expediente.experienceMatch.projectFitScore}%`, margin, y);
     y += 14;
-    const lines = doc.splitTextToSize(expediente.experienceMatch.explicacion, pageWidth - margin * 2);
+    const lines = doc.splitTextToSize(pdfSafe(expediente.experienceMatch.explicacion), pageWidth - margin * 2);
     doc.text(lines, margin, y);
     y += lines.length * 13 + 10;
   }
