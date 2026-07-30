@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { ChatMessage, Expediente } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useAllExpedientes } from "@/lib/store/expedientes-store";
+import { computeReportes } from "@/lib/services/reportes";
 
 const QUICK_PROMPTS = [
   "¿Qué documentos faltan?",
@@ -22,6 +24,7 @@ export function ChatPanel({ expediente }: { expediente: Expediente }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const allExpedientes = useAllExpedientes();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -43,10 +46,18 @@ export function ChatPanel({ expediente }: { expediente: Expediente }) {
     setLoading(true);
 
     try {
+      const reportes = computeReportes(allExpedientes);
+      const portfolio = {
+        totalExpedientes: reportes.totalExpedientes,
+        readyScorePromedio: reportes.readyScorePromedio,
+        porEstado: reportes.porEstado.map((e) => ({ label: e.label, count: e.count, pct: e.pct })),
+        expedientesConRiesgoAlto: allExpedientes.filter((e) => e.riesgos.some((r) => r.nivel === "alto" || r.nivel === "critico")).length,
+      };
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expedienteId: expediente.id, expediente, message: trimmed, history: nextMessages }),
+        body: JSON.stringify({ expedienteId: expediente.id, expediente, message: trimmed, history: nextMessages, portfolio }),
       });
       const data = await res.json();
       const reply: ChatMessage = {

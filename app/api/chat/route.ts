@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getExpedienteById } from "@/lib/mock-data";
-import { generateChatReply } from "@/lib/ai";
+import { generateChatReply, type PortfolioContext } from "@/lib/ai";
 import type { ChatMessage, Expediente } from "@/lib/types";
+
+function isPortfolioContext(value: unknown): value is PortfolioContext {
+  return !!value && typeof value === "object" && typeof (value as PortfolioContext).totalExpedientes === "number";
+}
 
 function isExpediente(value: unknown): value is Expediente {
   return !!value && typeof value === "object" && typeof (value as Expediente).id === "string" && Array.isArray((value as Expediente).checklist);
@@ -27,7 +31,8 @@ export async function POST(req: NextRequest) {
   }
 
   const history: ChatMessage[] = Array.isArray(body.history) ? body.history : [];
-  const reply = await generateChatReply(expediente, body.message, history);
+  const portfolio = isPortfolioContext(body.portfolio) ? body.portfolio : undefined;
+  const reply = await generateChatReply(expediente, body.message, history, portfolio);
 
   return NextResponse.json({ reply });
 }

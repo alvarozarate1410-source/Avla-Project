@@ -203,10 +203,13 @@ export function applyUploadedEvidence(expediente: Expediente, upload: ProcessedU
     ? [...expediente.sustentosPago, { id: `sp-${docId}`, ...upload.sustentoPagoUpdate }]
     : expediente.sustentosPago;
 
-  const insights =
-    isKnown && upload.resumenIA
-      ? [...expediente.insights, { id: `insight-${docId}`, texto: upload.resumenIA, tono: overallTono(upload.resultados) }]
-      : expediente.insights;
+  // Unknown/unreadable documents still get an insight when there's a
+  // diagnostic message worth keeping (e.g. "OCR no encontró texto legible")
+  // — that's exactly the kind of "why did this fail" detail that otherwise
+  // disappears behind a generic "Sin identificar" badge.
+  const insights = upload.resumenIA
+    ? [...expediente.insights, { id: `insight-${docId}`, texto: upload.resumenIA, tono: isKnown ? overallTono(upload.resultados) : "warning" }]
+    : expediente.insights;
 
   const informacionExtraida: InformacionExtraida = upload.f1Update
     ? { ...expediente.informacionExtraida, ...upload.f1Update }

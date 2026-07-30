@@ -16,7 +16,8 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const text = await extractText(file.name, buffer);
+  const extraction = await extractText(file.name, buffer);
+  const text = extraction.text;
   const classification = classifyDocument(file.name, text);
 
   let resultados: ReturnType<typeof interpretEvidence>["resultados"] = [];
@@ -84,6 +85,15 @@ export async function POST(req: NextRequest) {
     resumenIA = interpretation.resumenIA;
     equifaxUpdate = interpretation.equifaxUpdate;
     sustentoPagoUpdate = interpretation.sustentoPagoUpdate;
+  } else if (extraction.error) {
+    // Genuinely couldn't read the file — say exactly why instead of a mute
+    // "unrecognized document" badge, so the Ejecutivo knows whether to
+    // retry, re-scan, or just accept it needs manual review.
+    resumenIA = `No se pudo leer este documento: ${extraction.error}`;
+  } else if (!text.trim()) {
+    resumenIA = "El documento se procesó pero no se encontró texto legible en él. Revísalo manualmente.";
+  } else {
+    resumenIA = "El documento se leyó correctamente, pero su contenido no coincide con ningún tipo de documento conocido. Revísalo manualmente.";
   }
 
   return NextResponse.json({
@@ -93,6 +103,9 @@ export async function POST(req: NextRequest) {
     extracto: text.slice(0, 240),
     resultados,
     resumenIA,
+    extractionMethod: extraction.method,
+    extractionWarning: extraction.warning ?? null,
+    extractionError: extraction.error ?? null,
     equifaxUpdate: equifaxUpdate ?? null,
     sustentoPagoUpdate: sustentoPagoUpdate ?? null,
     experienceMatch: experienceMatch ?? null,

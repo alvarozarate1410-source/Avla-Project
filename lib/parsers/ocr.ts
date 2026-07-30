@@ -3,7 +3,8 @@ import path from "node:path";
 import type { PDFiumDocument } from "@hyzyla/pdfium";
 
 const LANG_PATH = path.join(process.cwd(), "node_modules/@tesseract.js-data/spa/4.0.0_best_int");
-const MAX_PDF_PAGES = 4;
+const MAX_OCR_PAGES = 8;
+const OCR_TIMEOUT_MS = 25_000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let workerPromise: Promise<any> | null = null;
@@ -27,14 +28,36 @@ function getWorker() {
   return workerPromise;
 }
 
-export async function ocrImageBuffer(buffer: Buffer): Promise<string> {
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label}: tiempo de espera agotado (${Math.round(ms / 1000)}s)`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+export interface OcrResult {
+  text: string;
+  error?: string;
+}
+
+export async function ocrImageBuffer(buffer: Buffer): Promise<OcrResult> {
   try {
     const worker = await getWorker();
-    const { data } = await worker.recognize(buffer);
-    return data.text ?? "";
+    const { data } = await withTimeout<{ data: { text: string } }>(worker.recognize(buffer), OCR_TIMEOUT_MS, "OCR de imagen");
+    return { text: data.text ?? "" };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error("[avla-nexus] OCR failed for image:", err);
-    return "";
+    return { text: "", error: message };
   }
 }
 
@@ -62,12 +85,21 @@ function getPdfium() {
   return pdfiumLibraryPromise;
 }
 
+export interface PageOcrResult {
+  pageIndex: number;
+  text: string;
+  error?: string;
+}
+
 /**
- * Scanned PDFs (a photo/scan saved as PDF) have no selectable text layer, so
- * pdf-parse comes back empty. This rasterizes the first pages to PNG via
- * PDFium and runs each page image through OCR.
+ * OCRs only the given (0-based) page indices of a PDF — used so a document
+ * that mixes real text pages with scanned/image pages only pays the OCR
+ * cost for the pages that actually need it, instead of the whole file.
+ * Bounded to MAX_OCR_PAGES so one huge scanned bundle can't stall a request
+ * indefinitely.
  */
-export async function ocrPdfBuffer(buffer: Buffer): Promise<string> {
+export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promise<PageOcrResult[]> {
+  const targets = pageIndices.slice(0, MAX_OCR_PAGES);
   let document: PDFiumDocument | undefined;
   try {
     const library = await getPdfium();
@@ -75,23 +107,55 @@ export async function ocrPdfBuffer(buffer: Buffer): Promise<string> {
     document = doc;
     const sharpModule = (await import("sharp")).default;
 
-    const pageCount = Math.min(doc.getPageCount(), MAX_PDF_PAGES);
-    const pageTexts: string[] = [];
-    for (let i = 0; i < pageCount; i++) {
-      const page = doc.getPage(i);
-      const image = await page.render({
-        scale: 2,
-        render: async (options: { data: Uint8Array; width: number; height: number }) =>
-          sharpModule(options.data, { raw: { width: options.width, height: options.height, channels: 4 } })
-            .png()
-            .toBuffer(),
-      });
-      pageTexts.push(await ocrImageBuffer(Buffer.from(image.data)));
+    const results: PageOcrResult[] = [];
+    for (const pageIndex of targets) {
+      try {
+        const page = doc.getPage(pageIndex);
+        const image = await withTimeout<{ data: Uint8Array }>(
+          page.render({
+            scale: 2,
+            render: async (options: { data: Uint8Array; width: number; height: number }) =>
+              sharpModule(options.data, { raw: { width: options.width, height: options.height, channels: 4 } })
+                .png()
+                .toBuffer(),
+          }),
+          OCR_TIMEOUT_MS,
+          `Renderizado de página ${pageIndex + 1}`
+        );
+        const ocr = await ocrImageBuffer(Buffer.from(image.data));
+        results.push({ pageIndex, text: ocr.text, error: ocr.error });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[avla-nexus] OCR failed for PDF page ${pageIndex + 1}:`, err);
+        results.push({ pageIndex, text: "", error: message });
+      }
     }
-    return pageTexts.join("\n\n");
+    return results;
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[avla-nexus] Could not open PDF for page-level OCR:", err);
+    return targets.map((pageIndex) => ({ pageIndex, text: "", error: message }));
+  } finally {
+    document?.destroy();
+  }
+}
+
+/** Whole-document OCR fallback for PDFs with no text layer at all on any page. */
+export async function ocrPdfBuffer(buffer: Buffer): Promise<OcrResult> {
+  let document: PDFiumDocument | undefined;
+  try {
+    const library = await getPdfium();
+    const doc = await library.loadDocument(buffer);
+    document = doc;
+    const pageCount = Math.min(doc.getPageCount(), MAX_OCR_PAGES);
+    const results = await ocrPdfPages(buffer, Array.from({ length: pageCount }, (_, i) => i));
+    const firstError = results.find((r) => r.error && !r.text)?.error;
+    const text = results.map((r) => r.text).join("\n\n");
+    return { text, error: text.trim().length === 0 ? firstError : undefined };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error("[avla-nexus] OCR fallback failed for scanned PDF:", err);
-    return "";
+    return { text: "", error: message };
   } finally {
     document?.destroy();
   }
