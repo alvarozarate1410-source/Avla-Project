@@ -1,15 +1,16 @@
 import crypto from "node:crypto";
-import type { Rol } from "@/lib/auth/users";
 
 export const SESSION_COOKIE = "avla_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 const SECRET = process.env.SESSION_SECRET || "avla-nexus-dev-secret-change-me";
 
+// The token only identifies *who* is signed in — their display profile
+// (nombre, rol, avatar) is always re-read from the live user directory on
+// each request, so editing a profile takes effect immediately instead of
+// waiting for the cookie to catch up.
 export interface SessionPayload {
   username: string;
-  nombre: string;
-  rol: Rol;
 }
 
 function sign(payload: string): string {
@@ -33,9 +34,7 @@ export function verifySessionToken(token: string | undefined | null): SessionPay
 
   try {
     const parsed = JSON.parse(Buffer.from(json, "base64url").toString("utf8"));
-    if (typeof parsed?.username !== "string" || typeof parsed?.nombre !== "string" || typeof parsed?.rol !== "string") {
-      return null;
-    }
+    if (typeof parsed?.username !== "string") return null;
     return parsed as SessionPayload;
   } catch {
     return null;

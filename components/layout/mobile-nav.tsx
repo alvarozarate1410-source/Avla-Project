@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Menu, Plus, Sparkles, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NAV_ITEMS } from "@/lib/nav-items";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/components/layout/user-context";
@@ -74,6 +74,7 @@ export function MobileNav() {
         <div className="border-t border-[var(--border)] p-3">
           <div className="flex items-center gap-3 px-1 py-1.5">
             <Avatar className="h-8 w-8">
+              {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.nombre} />}
               <AvatarFallback>{initials(user.nombre)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">

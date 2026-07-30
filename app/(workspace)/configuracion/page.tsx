@@ -1,6 +1,5 @@
-import { Settings2 } from "lucide-react";
 import { Topbar } from "@/components/layout/topbar";
-import { ComingSoon } from "@/components/layout/coming-soon";
+import { ConfiguracionContent } from "@/components/configuracion/configuracion-content";
 
 export default function ConfiguracionPage() {
   return (
@@ -11,11 +10,7 @@ export default function ConfiguracionPage() {
           <p className="text-xs text-[var(--muted)]">Cuenta, equipo e integraciones</p>
         </div>
       </Topbar>
-      <ComingSoon
-        icon={Settings2}
-        title="Configuración del workspace"
-        description="Gestiona usuarios, permisos por rol e integraciones (SUNAT, OSCE, Equifax). En construcción."
-      />
+      <ConfiguracionContent />
     </>
   );
 }

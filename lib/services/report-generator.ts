@@ -1,5 +1,6 @@
 import type { Expediente } from "@/lib/types";
 import { estadoExpedienteConfig } from "@/lib/risk";
+import { formatDate } from "@/lib/utils";
 
 const BRAND = { r: 109, g: 94, b: 248 };
 const BRAND2 = { r: 79, g: 140, b: 255 };
@@ -12,14 +13,57 @@ function pdfSafe(text: string) {
   return text.replace(/≤/g, "<=").replace(/≥/g, ">=");
 }
 
+function money(value: number | undefined) {
+  return value !== undefined ? `S/ ${value.toLocaleString("es-PE")}` : "No identificado";
+}
+
 export async function generateExpedienteReport(expediente: Expediente) {
   const { jsPDF } = await import("jspdf");
   const autoTable = (await import("jspdf-autotable")).default;
 
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 40;
   let y = 0;
+
+  function lastTableY() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (doc as any).lastAutoTable.finalY as number;
+  }
+
+  function ensureSpace(needed: number) {
+    if (y + needed > pageHeight - 50) {
+      doc.addPage();
+      y = 50;
+    }
+  }
+
+  function sectionTitle(title: string) {
+    ensureSpace(30);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(INK.r, INK.g, INK.b);
+    doc.text(title, margin, y);
+    y += 20;
+  }
+
+  function keyValueTable(rows: [string, string][]) {
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      body: rows.map(([k, v]) => [k, pdfSafe(v)]),
+      styles: { fontSize: 8.5, cellPadding: 6, textColor: [40, 42, 54] },
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 160, textColor: [90, 92, 105] } },
+      theme: "grid",
+      tableLineColor: [230, 231, 238],
+      tableLineWidth: 0.5,
+      didParseCell: (data) => {
+        if (data.column.index === 0) data.cell.styles.fillColor = [246, 247, 250];
+      },
+    });
+    y = lastTableY() + 24;
+  }
 
   // Header band
   doc.setFillColor(BRAND.r, BRAND.g, BRAND.b);
@@ -38,7 +82,7 @@ export async function generateExpedienteReport(expediente: Expediente) {
   doc.setTextColor(INK.r, INK.g, INK.b);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
-  doc.text(expediente.nombreProyecto, margin, y);
+  doc.text(pdfSafe(expediente.nombreProyecto), margin, y);
   y += 18;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
@@ -72,26 +116,53 @@ export async function generateExpedienteReport(expediente: Expediente) {
   });
 
   y += 76;
-  doc.setTextColor(INK.r, INK.g, INK.b);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text("Resumen Ejecutivo", margin, y);
-  y += 14;
+
+  // Ficha del cliente — everything AMARU needs to register the record.
+  sectionTitle("Ficha del Cliente (registro AMARU)");
+  const info = expediente.informacionExtraida;
+  const representantes = info.representantesLegales?.length ? info.representantesLegales.join(", ") : info.representanteLegal || "No identificado";
+  const clienteRows: [string, string][] = [
+    ["Razón Social", info.razonSocial || "No identificado"],
+    ["RUC", info.ruc || "No identificado"],
+    ["Representante(s) Legal(es)", representantes],
+    ["Dirección Fiscal", info.direccion || "No identificado"],
+    ["Correo", info.correo || "No identificado"],
+    ["Actividad Económica", info.actividadEconomica ? `${info.actividadEconomica}${info.ciiu ? ` (CIIU ${info.ciiu})` : ""}` : "No identificado"],
+    ["Patrimonio Declarado", money(info.patrimonio)],
+  ];
+  if (info.participacionConsorcio !== undefined) {
+    clienteRows.push(["Participación en Consorcio", `${info.participacionConsorcio}%`]);
+  }
+  keyValueTable(clienteRows);
+
+  // Requerimiento — extracted from Bases Integradas / cross-checked with Buena Pro.
+  if (expediente.requerimiento) {
+    const req = expediente.requerimiento;
+    sectionTitle("Requerimiento del Proyecto");
+    const reqRows: [string, string][] = [];
+    if (req.beneficiario) reqRows.push(["Entidad / Beneficiario", req.beneficiario]);
+    if (req.montoAdjudicado !== undefined) {
+      reqRows.push(["Monto Adjudicado", `${money(req.montoAdjudicado)}${req.montoAdjudicadoFuente ? ` (${req.montoAdjudicadoFuente})` : ""}`]);
+    }
+    if (req.lugarEjecucion) reqRows.push(["Lugar de Ejecución", req.lugarEjecucion]);
+    if (req.plazoValor !== undefined) reqRows.push(["Plazo", `${req.plazoValor} ${req.plazoUnidad}`]);
+    if (reqRows.length > 0) keyValueTable(reqRows);
+  }
+
+  ensureSpace(60);
+  sectionTitle("Resumen Ejecutivo");
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
   doc.setTextColor(50, 52, 64);
   expediente.executiveBrief.parrafos.forEach((p) => {
     const lines = doc.splitTextToSize(pdfSafe(p), pageWidth - margin * 2);
+    ensureSpace(lines.length * 13 + 6);
     doc.text(lines, margin, y);
     y += lines.length * 13 + 6;
   });
-
   y += 6;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(INK.r, INK.g, INK.b);
-  doc.text("Riesgos identificados", margin, y);
-  y += 8;
+
+  sectionTitle("Riesgos identificados");
   autoTable(doc, {
     startY: y,
     margin: { left: margin, right: margin },
@@ -101,18 +172,9 @@ export async function generateExpedienteReport(expediente: Expediente) {
     headStyles: { fillColor: [BRAND.r, BRAND.g, BRAND.b], textColor: 255 },
     theme: "grid",
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  y = (doc as any).lastAutoTable.finalY + 24;
+  y = lastTableY() + 24;
 
-  if (y > 680) {
-    doc.addPage();
-    y = 50;
-  }
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text("Checklist del expediente", margin, y);
-  y += 8;
+  sectionTitle("Checklist del expediente");
   const checklistRows = expediente.checklist.flatMap((b) =>
     b.items.map((i) => [
       b.titulo,
@@ -129,25 +191,75 @@ export async function generateExpedienteReport(expediente: Expediente) {
     headStyles: { fillColor: [BRAND2.r, BRAND2.g, BRAND2.b], textColor: 255 },
     theme: "grid",
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  y = (doc as any).lastAutoTable.finalY + 24;
+  y = lastTableY() + 24;
+
+  if (expediente.evidencias.length > 0) {
+    sectionTitle("Validaciones externas (evidencias)");
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [["Validación", "Resultado", "Fecha"]],
+      body: expediente.evidencias.map((e) => [
+        pdfSafe(e.tituloVisible),
+        pdfSafe(e.resultados.map((r) => `${r.etiqueta}: ${r.valor}`).join(" · ") || e.resumenIA),
+        formatDate(e.subidoEn),
+      ]),
+      styles: { fontSize: 8.5, cellPadding: 6, textColor: [40, 42, 54] },
+      headStyles: { fillColor: [BRAND.r, BRAND.g, BRAND.b], textColor: 255 },
+      theme: "grid",
+    });
+    y = lastTableY() + 24;
+  }
+
+  if (expediente.equifax) {
+    sectionTitle("Equifax");
+    keyValueTable([
+      ["Score", `${expediente.equifax.score} / 900`],
+      ["Clasificación", expediente.equifax.clasificacion],
+      ["Alertas", expediente.equifax.alertas.length > 0 ? expediente.equifax.alertas.join("; ") : "Sin alertas críticas"],
+    ]);
+  }
+
+  if (expediente.sustentosPago.length > 0) {
+    sectionTitle("Sustentos de pago");
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [["Monto", "Entidad Bancaria", "Fecha", "Beneficiario"]],
+      body: expediente.sustentosPago.map((s) => [money(s.monto), pdfSafe(s.entidadBancaria), formatDate(s.fecha), pdfSafe(s.beneficiario)]),
+      styles: { fontSize: 8.5, cellPadding: 6, textColor: [40, 42, 54] },
+      headStyles: { fillColor: [BRAND2.r, BRAND2.g, BRAND2.b], textColor: 255 },
+      theme: "grid",
+    });
+    y = lastTableY() + 24;
+  }
 
   if (expediente.experienceMatch) {
-    if (y > 650) {
-      doc.addPage();
-      y = 50;
-    }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("Experience Match", margin, y);
-    y += 14;
+    ensureSpace(50);
+    sectionTitle("Experience Match");
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
+    doc.setTextColor(50, 52, 64);
     doc.text(`Project Fit Score: ${expediente.experienceMatch.projectFitScore}%`, margin, y);
     y += 14;
     const lines = doc.splitTextToSize(pdfSafe(expediente.experienceMatch.explicacion), pageWidth - margin * 2);
+    ensureSpace(lines.length * 13 + 10);
     doc.text(lines, margin, y);
-    y += lines.length * 13 + 10;
+    y += lines.length * 13 + 16;
+
+    if (expediente.experienceMatch.contratos.length > 0) {
+      ensureSpace(40);
+      autoTable(doc, {
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [["Entidad", "Objeto", "Monto", "Compatible"]],
+        body: expediente.experienceMatch.contratos.map((c) => [pdfSafe(c.entidad), pdfSafe(c.objeto), money(c.monto), c.compatible ? "Sí" : "No"]),
+        styles: { fontSize: 8, cellPadding: 5, textColor: [40, 42, 54] },
+        headStyles: { fillColor: [BRAND.r, BRAND.g, BRAND.b], textColor: 255 },
+        theme: "grid",
+      });
+      y = lastTableY() + 20;
+    }
   }
 
   const pageCount = doc.getNumberOfPages();

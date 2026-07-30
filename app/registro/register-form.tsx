@@ -8,14 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 
-const DEMO_USERS = [
-  { username: "mariana.torres", password: "avla2026", rol: "Ejecutivo Comercial" },
-  { username: "diego.fernandez", password: "avla2026", rol: "Practicante Comercial" },
-];
+const ROLES = ["Practicante Comercial", "Ejecutivo Comercial", "Jefe Comercial"] as const;
 
-export function LoginForm() {
+export function RegisterForm() {
+  const [nombre, setNombre] = useState("");
   const [username, setUsername] = useState("");
+  const [rol, setRol] = useState<(typeof ROLES)[number]>("Practicante Comercial");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -24,18 +24,23 @@ export function LoginForm() {
     e.preventDefault();
     if (loading) return;
     setError(null);
-    setLoading(true);
 
+    if (password !== confirmPassword) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+
+    setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ nombre, username, password, rol }),
       });
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "No se pudo iniciar sesión.");
+        setError(data.error ?? "No se pudo crear la cuenta.");
         return;
       }
 
@@ -55,13 +60,20 @@ export function LoginForm() {
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl brand-gradient text-white shadow-[0_8px_24px_-8px_var(--brand)]">
             <Sparkles className="h-6 w-6" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight">AVLA NEXUS</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">Commercial Intelligence Workspace</p>
+          <h1 className="text-xl font-semibold tracking-tight">Crear cuenta</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">Únete al workspace de AVLA NEXUS</p>
         </div>
 
         <Card className="glass-strong p-1">
           <CardContent className="p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label htmlFor="nombre" className="text-xs font-medium text-[var(--muted)]">
+                  Nombre completo
+                </label>
+                <Input id="nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Juan Pérez" required />
+              </div>
+
               <div className="space-y-1.5">
                 <label htmlFor="username" className="text-xs font-medium text-[var(--muted)]">
                   Usuario
@@ -69,12 +81,31 @@ export function LoginForm() {
                 <Input
                   id="username"
                   autoComplete="username"
-                  placeholder="nombre.apellido"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  placeholder="nombre.apellido"
                   required
                 />
               </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="rol" className="text-xs font-medium text-[var(--muted)]">
+                  Rol
+                </label>
+                <select
+                  id="rol"
+                  value={rol}
+                  onChange={(e) => setRol(e.target.value as (typeof ROLES)[number])}
+                  className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm text-[var(--foreground)]"
+                >
+                  {ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="space-y-1.5">
                 <label htmlFor="password" className="text-xs font-medium text-[var(--muted)]">
                   Contraseña
@@ -82,10 +113,24 @@ export function LoginForm() {
                 <Input
                   id="password"
                   type="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="confirmPassword" className="text-xs font-medium text-[var(--muted)]">
+                  Confirmar contraseña
+                </label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                 />
               </div>
@@ -99,34 +144,18 @@ export function LoginForm() {
 
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                Iniciar sesión
+                Crear cuenta
               </Button>
             </form>
           </CardContent>
         </Card>
 
         <p className="mt-5 text-center text-xs text-[var(--muted)]">
-          ¿No tienes cuenta?{" "}
-          <Link href="/registro" className="font-medium text-[var(--brand)] hover:underline">
-            Crear cuenta
+          ¿Ya tienes cuenta?{" "}
+          <Link href="/login" className="font-medium text-[var(--brand)] hover:underline">
+            Inicia sesión
           </Link>
         </p>
-
-        <div className="mt-5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-            Usuarios de demostración
-          </p>
-          <ul className="space-y-1.5">
-            {DEMO_USERS.map((u) => (
-              <li key={u.username} className="flex items-center justify-between text-[11px]">
-                <span className="text-[var(--foreground)]">
-                  {u.username} <span className="text-[var(--muted)]">/ {u.password}</span>
-                </span>
-                <span className="text-[var(--muted)]">{u.rol}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
       </div>
     </main>
   );

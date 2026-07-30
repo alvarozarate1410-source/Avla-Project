@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Plus, PanelLeftClose, PanelLeft, Sparkles, LogOut } from "lucide-react";
+import { Plus, PanelLeftClose, PanelLeft, Sparkles, LogOut, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -122,6 +122,7 @@ export function Sidebar() {
           <DropdownMenuTrigger asChild>
             <button className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-[var(--surface-2)]">
               <Avatar className="h-8 w-8">
+                {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.nombre} />}
                 <AvatarFallback>{initials(user.nombre)}</AvatarFallback>
               </Avatar>
               {!collapsed && (
@@ -135,6 +136,12 @@ export function Sidebar() {
           <DropdownMenuContent align="start" side="top" className="w-56">
             <DropdownMenuLabel>{user.nombre}</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/configuracion">
+                <Settings2 className="h-4 w-4" />
+                Configuración
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleLogout} disabled={loggingOut}>
               <LogOut className="h-4 w-4" />
               Cerrar sesión

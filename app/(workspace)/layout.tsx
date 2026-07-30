@@ -3,15 +3,17 @@ import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { UserProvider } from "@/components/layout/user-context";
 import { verifySessionToken, SESSION_COOKIE } from "@/lib/auth/session";
+import { findPublicProfile } from "@/lib/auth/users";
 
 export default async function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const session = verifySessionToken(cookieStore.get(SESSION_COOKIE)?.value);
+  const profile = session ? findPublicProfile(session.username) : undefined;
 
-  if (!session) redirect("/login");
+  if (!session || !profile) redirect("/login");
 
   return (
-    <UserProvider user={session}>
+    <UserProvider user={profile}>
       <div className="flex min-h-screen w-full">
         <Sidebar />
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">{children}</div>
