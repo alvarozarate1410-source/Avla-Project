@@ -13,14 +13,25 @@ import { ExperienceMatchCard } from "@/components/expediente/experience-match-ca
 import { EquifaxCard } from "@/components/expediente/equifax-card";
 import { EvidenciasGrid } from "@/components/expediente/evidencias-grid";
 import { InformacionExtraidaCard } from "@/components/expediente/informacion-extraida-card";
+import { RequerimientoCard } from "@/components/expediente/requerimiento-card";
 import { DocumentosListCard } from "@/components/expediente/documentos-list-card";
 import { ChatPanel } from "@/components/expediente/chat-panel";
 import { generateExpedienteReport } from "@/lib/services/report-generator";
+import { useExpedientesStore } from "@/lib/store/expedientes-store";
 import type { Expediente } from "@/lib/types";
 
-export function ExpedienteDetailView({ expediente: initialExpediente }: { expediente: Expediente }) {
-  const [expediente, setExpediente] = useState(initialExpediente);
+export function ExpedienteDetailView({ expediente }: { expediente: Expediente }) {
   const [generating, setGenerating] = useState(false);
+
+  // Reads live store state at call time (not the closed-over prop) so
+  // concurrent uploads (multiple files processed in parallel) never clobber
+  // each other's updates — the same "functional update" safety a React
+  // setState updater gives you, applied to the zustand store instead.
+  function handleExpedienteChange(updater: (prev: Expediente) => Expediente) {
+    const store = useExpedientesStore.getState();
+    const current = store.overrides[expediente.id] ?? expediente;
+    store.upsert(updater(current));
+  }
 
   async function handleGenerateReport() {
     if (generating) return;
@@ -41,7 +52,7 @@ export function ExpedienteDetailView({ expediente: initialExpediente }: { expedi
         </div>
       </Topbar>
 
-      <ExpedienteHeader expediente={expediente} onGenerateReport={handleGenerateReport} onExpedienteChange={setExpediente} />
+      <ExpedienteHeader expediente={expediente} onGenerateReport={handleGenerateReport} onExpedienteChange={handleExpedienteChange} />
       {generating && (
         <div className="animate-shimmer h-0.5 w-full bg-gradient-to-r from-transparent via-[var(--brand)] to-transparent" />
       )}
@@ -75,6 +86,7 @@ export function ExpedienteDetailView({ expediente: initialExpediente }: { expedi
 
           <div className="space-y-6">
             <InformacionExtraidaCard info={expediente.informacionExtraida} />
+            {expediente.requerimiento && <RequerimientoCard requerimiento={expediente.requerimiento} />}
             <DocumentosListCard documentos={expediente.documentos} />
             <div className="sticky top-[88px]">
               <ChatPanel expediente={expediente} />

@@ -6,13 +6,19 @@ import type { InformacionExtraida } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
 
 export function InformacionExtraidaCard({ info }: { info: InformacionExtraida }) {
+  const representantes = info.representantesLegales?.length ? info.representantesLegales.join(", ") : info.representanteLegal;
+
   const rows = [
     { icon: Building2, label: "Razón Social", value: info.razonSocial },
     { icon: Hash, label: "RUC", value: info.ruc },
-    { icon: User, label: "Representante Legal", value: info.representanteLegal },
+    { icon: User, label: info.representantesLegales && info.representantesLegales.length > 1 ? "Representantes Legales" : "Representante Legal", value: representantes },
     { icon: MapPin, label: "Dirección", value: info.direccion },
     { icon: Mail, label: "Correo", value: info.correo },
-    { icon: Briefcase, label: "Actividad Económica", value: info.actividadEconomica },
+    {
+      icon: Briefcase,
+      label: "Actividad Económica",
+      value: info.ciiu ? `${info.actividadEconomica} (CIIU ${info.ciiu})` : info.actividadEconomica,
+    },
     { icon: Wallet, label: "Patrimonio", value: formatCurrency(info.patrimonio) },
     ...(info.participacionConsorcio
       ? [{ icon: Users2, label: "Participación Consorcio", value: `${info.participacionConsorcio}%` }]

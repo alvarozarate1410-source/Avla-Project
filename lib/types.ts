@@ -24,6 +24,7 @@ export type TipoDocumentoDetectado =
   | "ACTA_BUENA_PRO"
   | "FICHA_CONSORCIO"
   | "CONTRATO_CONSORCIO"
+  | "CONTRATO_ENTIDAD"
   | "CONSULTA_RUC"
   | "CONSULTA_DEUDA_COACTIVA"
   | "CONSULTA_PROVEEDORES_ESTADO"
@@ -160,11 +161,42 @@ export interface InformacionExtraida {
   razonSocial: string;
   ruc: string;
   representanteLegal: string;
+  representantesLegales?: string[];
   direccion: string;
   correo: string;
   actividadEconomica: string;
+  ciiu?: string;
   patrimonio: number;
   participacionConsorcio?: number;
+}
+
+export interface RequerimientoInfo {
+  lugarEjecucion?: string;
+  montoAdjudicado?: number;
+  montoAdjudicadoFuente?: "Bases Integradas" | "Reporte de Buena Pro" | "Bases Integradas y Reporte de Buena Pro (cruzado)";
+  beneficiario?: string;
+  plazoValor?: number;
+  plazoUnidad?: "días" | "meses";
+}
+
+export interface TemplateChecklistItem {
+  id: string;
+  label: string;
+  tipoDetectado?: TipoDocumentoDetectado;
+  obligatorio: boolean;
+}
+
+export interface TemplateBloque {
+  id: CategoriaChecklist;
+  titulo: string;
+  items: TemplateChecklistItem[];
+}
+
+export interface ExpedienteTemplate {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  bloques: TemplateBloque[];
 }
 
 export interface ChatMessage {
@@ -192,6 +224,7 @@ export interface Expediente {
   documentos: Documento[];
   evidencias: Evidencia[];
   informacionExtraida: InformacionExtraida;
+  requerimiento?: RequerimientoInfo;
   experienceMatch?: ExperienceMatch;
   equifax?: EquifaxSummary;
   sustentosPago: SustentoPago[];

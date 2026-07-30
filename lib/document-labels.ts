@@ -18,6 +18,7 @@ export const TIPO_LABELS: Record<TipoDocumentoDetectado, string> = {
   ACTA_BUENA_PRO: "Acta de Buena Pro",
   FICHA_CONSORCIO: "Ficha básica del consorcio",
   CONTRATO_CONSORCIO: "Contrato de Consorcio",
+  CONTRATO_ENTIDAD: "Contrato con la Entidad",
   CONSULTA_RUC: "Consulta RUC",
   CONSULTA_DEUDA_COACTIVA: "Consulta Deuda Coactiva",
   CONSULTA_PROVEEDORES_ESTADO: "Proveedores del Estado (OSCE)",

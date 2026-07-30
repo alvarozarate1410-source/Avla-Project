@@ -3,6 +3,8 @@ import { extractText } from "@/lib/parsers/extract-text";
 import { classifyDocument } from "@/lib/services/document-classifier";
 import { interpretEvidence } from "@/lib/services/evidence-interpreter";
 import { analyzeSeaceWorkbook } from "@/lib/parsers/parse-seace-excel";
+import { interpretF1, interpretBasesIntegradas, interpretReporteBuenaPro, extractNombreProyecto } from "@/lib/services/proyecto-interpreter";
+import type { InformacionExtraida, RequerimientoInfo } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData().catch(() => null);
@@ -22,6 +24,14 @@ export async function POST(req: NextRequest) {
   let equifaxUpdate: ReturnType<typeof interpretEvidence>["equifaxUpdate"] = undefined;
   let sustentoPagoUpdate: ReturnType<typeof interpretEvidence>["sustentoPagoUpdate"] = undefined;
   let experienceMatch = undefined;
+  let f1Data: Partial<InformacionExtraida> | null = null;
+  let requerimientoData: RequerimientoInfo | null = null;
+  let buenaProData: { montoAdjudicado?: number; beneficiario?: string } | null = null;
+  let nombreProyectoSugerido: string | null = null;
+
+  if (classification.tipoDetectado === "BASES_INTEGRADAS" || classification.tipoDetectado === "SOLICITUD_EMISION") {
+    nombreProyectoSugerido = extractNombreProyecto(text) ?? null;
+  }
 
   if (classification.tipoDetectado === "EXPERIENCIA_SEACE") {
     experienceMatch = analyzeSeaceWorkbook(buffer, typeof context === "string" ? context : "") ?? undefined;
@@ -38,6 +48,36 @@ export async function POST(req: NextRequest) {
     } else {
       resumenIA = "No se pudo analizar el archivo de experiencia SEACE. Verifica que sea un Excel con columnas de objeto y entidad.";
     }
+  } else if (classification.tipoDetectado === "F1_FICHA_BASICA" || classification.tipoDetectado === "F3_DJ_PATRIMONIAL") {
+    f1Data = interpretF1(text);
+    const found = Object.keys(f1Data).length;
+    resultados = [{ etiqueta: "Datos extraídos", valor: `${found} campo(s)`, tono: found > 0 ? "success" : "warning" }];
+    resumenIA =
+      found > 0
+        ? `Se extrajeron ${found} campo(s) del cliente${f1Data.razonSocial ? ` (${f1Data.razonSocial})` : ""}.`
+        : "No se pudieron extraer campos automáticamente de este documento. Revisa el formato.";
+  } else if (classification.tipoDetectado === "BASES_INTEGRADAS") {
+    requerimientoData = interpretBasesIntegradas(text);
+    const found = Object.keys(requerimientoData).length;
+    resultados = [{ etiqueta: "Requerimiento", valor: `${found} campo(s) identificados`, tono: found > 0 ? "success" : "warning" }];
+    resumenIA =
+      found > 0
+        ? `Se identificó el Requerimiento: ${[
+            requerimientoData.lugarEjecucion && `lugar de ejecución (${requerimientoData.lugarEjecucion})`,
+            requerimientoData.montoAdjudicado && `monto adjudicado (S/ ${requerimientoData.montoAdjudicado.toLocaleString("es-PE")})`,
+            requerimientoData.plazoValor && `plazo (${requerimientoData.plazoValor} ${requerimientoData.plazoUnidad})`,
+          ]
+            .filter(Boolean)
+            .join(", ")}.`
+        : "No se pudo extraer automáticamente la sección de Requerimiento. Revisa el documento.";
+  } else if (classification.tipoDetectado === "REPORTE_BUENA_PRO") {
+    buenaProData = interpretReporteBuenaPro(text);
+    const found = Object.keys(buenaProData).length;
+    resultados = [{ etiqueta: "Datos extraídos", valor: `${found} campo(s)`, tono: found > 0 ? "success" : "warning" }];
+    resumenIA =
+      buenaProData.montoAdjudicado !== undefined
+        ? `Monto adjudicado según Reporte de Buena Pro: S/ ${buenaProData.montoAdjudicado.toLocaleString("es-PE")}.`
+        : "No se pudo extraer automáticamente el monto adjudicado de este reporte.";
   } else if (classification.tipoDetectado !== "DESCONOCIDO") {
     const interpretation = interpretEvidence(classification.tipoDetectado, text);
     resultados = interpretation.resultados;
@@ -56,5 +96,9 @@ export async function POST(req: NextRequest) {
     equifaxUpdate: equifaxUpdate ?? null,
     sustentoPagoUpdate: sustentoPagoUpdate ?? null,
     experienceMatch: experienceMatch ?? null,
+    f1Data,
+    requerimientoData,
+    buenaProData,
+    nombreProyectoSugerido,
   });
 }

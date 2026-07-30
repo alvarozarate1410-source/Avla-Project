@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, FileSearch } from "lucide-react";
-import { expedientes } from "@/lib/mock-data";
+import { useAllExpedientes } from "@/lib/store/expedientes-store";
 import { estadoExpedienteConfig } from "@/lib/risk";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ export function GlobalSearch() {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const expedientes = useAllExpedientes();
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {

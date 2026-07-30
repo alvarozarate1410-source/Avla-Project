@@ -7,11 +7,14 @@ import type {
   EvidenciaResultado,
   ExperienceMatch,
   Expediente,
+  InformacionExtraida,
   NivelRiesgo,
+  RequerimientoInfo,
   SustentoPago,
   TipoDocumentoDetectado,
 } from "@/lib/types";
 import { TIPO_LABELS } from "@/lib/document-labels";
+import { mergeRequerimiento } from "@/lib/services/proyecto-interpreter";
 
 const VALIDACIONES_TIPOS: TipoDocumentoDetectado[] = [
   "CONSULTA_RUC",
@@ -34,6 +37,9 @@ export interface ProcessedUpload {
   experienceMatchUpdate?: ExperienceMatch;
   equifaxUpdate?: EquifaxSummary;
   sustentoPagoUpdate?: Omit<SustentoPago, "id">;
+  f1Update?: Partial<InformacionExtraida>;
+  requerimientoUpdate?: RequerimientoInfo;
+  buenaProUpdate?: { montoAdjudicado?: number; beneficiario?: string };
 }
 
 function extensionFromName(name: string): Documento["extension"] {
@@ -178,6 +184,15 @@ export function applyUploadedEvidence(expediente: Expediente, upload: ProcessedU
       ? [...expediente.insights, { id: `insight-${docId}`, texto: upload.resumenIA, tono: overallTono(upload.resultados) }]
       : expediente.insights;
 
+  const informacionExtraida: InformacionExtraida = upload.f1Update
+    ? { ...expediente.informacionExtraida, ...upload.f1Update }
+    : expediente.informacionExtraida;
+
+  const requerimiento: RequerimientoInfo | undefined =
+    upload.requerimientoUpdate || upload.buenaProUpdate
+      ? mergeRequerimiento(expediente.requerimiento, upload.requerimientoUpdate, upload.buenaProUpdate)
+      : expediente.requerimiento;
+
   let updated: Expediente = {
     ...expediente,
     documentos: [nuevoDocumento, ...expediente.documentos],
@@ -185,6 +200,8 @@ export function applyUploadedEvidence(expediente: Expediente, upload: ProcessedU
     evidencias,
     sustentosPago,
     insights,
+    informacionExtraida,
+    requerimiento,
     experienceMatch: upload.experienceMatchUpdate ?? expediente.experienceMatch,
     equifax: upload.equifaxUpdate ?? expediente.equifax,
     actualizadoEn: now,

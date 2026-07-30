@@ -1,4 +1,5 @@
 import type { EquifaxSummary, EvidenciaResultado, SustentoPago, TipoDocumentoDetectado } from "@/lib/types";
+import { findMoney } from "@/lib/parsers/money";
 
 export interface InterpretationResult {
   resultados: EvidenciaResultado[];
@@ -8,14 +9,6 @@ export interface InterpretationResult {
 }
 
 const BANCOS = ["BCP", "BBVA", "Interbank", "Scotiabank", "Banco de la Nación", "Banco Pichincha", "Banbif", "Mibanco"];
-
-function findMoney(text: string): number | null {
-  const match = text.match(/S\/\.?\s?([\d]{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)/);
-  if (!match) return null;
-  const raw = match[1].replace(/\./g, "").replace(",", ".");
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
-}
 
 function findDate(text: string): string | null {
   const match = text.match(/\b(\d{2})[/-](\d{2})[/-](\d{4})\b/);

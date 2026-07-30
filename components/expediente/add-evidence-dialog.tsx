@@ -72,6 +72,9 @@ export function AddEvidenceDialog({
             experienceMatchUpdate: data.experienceMatch ?? undefined,
             equifaxUpdate: data.equifaxUpdate ?? undefined,
             sustentoPagoUpdate: data.sustentoPagoUpdate ?? undefined,
+            f1Update: data.f1Data ?? undefined,
+            requerimientoUpdate: data.requerimientoData ?? undefined,
+            buenaProUpdate: data.buenaProData ?? undefined,
           })
         );
       } catch {

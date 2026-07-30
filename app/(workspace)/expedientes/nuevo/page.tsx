@@ -1,5 +1,5 @@
 import { Topbar } from "@/components/layout/topbar";
-import { UploadFlow } from "@/components/upload/upload-flow";
+import { NuevoExpedienteFlow } from "@/components/upload/nuevo-expediente-flow";
 
 export default function NuevoExpedientePage() {
   return (
@@ -11,7 +11,7 @@ export default function NuevoExpedientePage() {
         </div>
       </Topbar>
       <main className="noise-veil flex-1 px-6 py-10">
-        <UploadFlow />
+        <NuevoExpedienteFlow />
       </main>
     </>
   );
