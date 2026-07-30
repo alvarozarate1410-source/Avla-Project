@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, Building2, Hash, User, MapPin, Mail, Briefcase, Wallet, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ExpedienteCard } from "@/components/dashboard/expediente-card";
+import { ClienteTimeline } from "@/components/clientes/cliente-timeline";
 import { useAllExpedientes } from "@/lib/store/expedientes-store";
 import { buildClientePerfiles } from "@/lib/services/clientes";
 import { formatCurrency } from "@/lib/utils";
@@ -108,12 +108,10 @@ export function ClienteDetailContent({ ruc }: { ruc: string }) {
         </div>
 
         <div className="xl:col-span-2">
-          <h3 className="mb-4 text-sm font-semibold">Historial de expedientes</h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {cliente.expedientes.map((exp, i) => (
-              <ExpedienteCard key={exp.id} expediente={exp} index={i} />
-            ))}
-          </div>
+          <h3 className="mb-4 text-sm font-semibold">Historial de proyectos</h3>
+          <Card className="p-6">
+            <ClienteTimeline expedientes={cliente.expedientes} />
+          </Card>
         </div>
       </div>
     </main>

@@ -1,10 +1,11 @@
 "use client";
 
-import { Bell, HelpCircle } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { GlobalSearch } from "@/components/layout/global-search";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
 
 export function Topbar({ children }: { children?: React.ReactNode }) {
   return (
@@ -13,9 +14,7 @@ export function Topbar({ children }: { children?: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 items-center gap-4">{children}</div>
       <GlobalSearch />
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon" aria-label="Notificaciones">
-          <Bell className="h-4 w-4" />
-        </Button>
+        <NotificationsBell />
         <Button variant="ghost" size="icon" aria-label="Ayuda">
           <HelpCircle className="h-4 w-4" />
         </Button>

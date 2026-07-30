@@ -232,3 +232,23 @@ export interface Expediente {
   tiempoAhorradoMin: number;
   consorcioDetectado?: { empresas: number; nombres: string[] };
 }
+
+export type NotificationTipo =
+  | "ready_score_alto"
+  | "riesgo_detectado"
+  | "checklist_completo"
+  | "expediente_inactivo"
+  | "experience_match_listo";
+
+export interface AppNotification {
+  id: string;
+  tipo: NotificationTipo;
+  expedienteId: string;
+  expedienteNombre: string;
+  titulo: string;
+  mensaje: string;
+  createdAt: string;
+  leido: boolean;
+  /** Identifies the underlying event so the same thing never gets notified twice. */
+  dedupeKey: string;
+}

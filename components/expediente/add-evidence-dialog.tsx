@@ -10,6 +10,8 @@ import { TIPO_LABELS } from "@/lib/document-labels";
 import type { Expediente, TipoDocumentoDetectado } from "@/lib/types";
 import { formatBytes, cn } from "@/lib/utils";
 import { applyUploadedEvidence } from "@/lib/services/expediente-mutations";
+import { detectUploadNotifications } from "@/lib/services/notification-triggers";
+import { useNotificationsStore } from "@/lib/store/notifications-store";
 
 type Stage = "analizando" | "completado" | "error";
 
@@ -40,6 +42,7 @@ export function AddEvidenceDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const pushNotification = useNotificationsStore((s) => s.push);
 
   const processFile = useCallback(
     async (file: File) => {
@@ -59,8 +62,8 @@ export function AddEvidenceDialog({
           prev.map((q) => (q.id === id ? { ...q, stage: "completado", tipoDetectado: data.tipoDetectado, resumenIA: data.resumenIA } : q))
         );
 
-        onExpedienteChange((prev) =>
-          applyUploadedEvidence(prev, {
+        onExpedienteChange((prev) => {
+          const next = applyUploadedEvidence(prev, {
             fileName: data.fileName,
             size: data.size,
             tipoDetectado: data.tipoDetectado,
@@ -75,13 +78,15 @@ export function AddEvidenceDialog({
             f1Update: data.f1Data ?? undefined,
             requerimientoUpdate: data.requerimientoData ?? undefined,
             buenaProUpdate: data.buenaProData ?? undefined,
-          })
-        );
+          });
+          for (const notification of detectUploadNotifications(prev, next)) pushNotification(notification);
+          return next;
+        });
       } catch {
         setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, stage: "error" } : q)));
       }
     },
-    [expediente.nombreProyecto, expediente.informacionExtraida.actividadEconomica, onExpedienteChange]
+    [expediente.nombreProyecto, expediente.informacionExtraida.actividadEconomica, onExpedienteChange, pushNotification]
   );
 
   const onDrop = useCallback(
