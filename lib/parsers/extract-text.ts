@@ -1,6 +1,7 @@
 import path from "node:path";
 import * as XLSX from "xlsx";
 import { ocrImageBuffer, ocrPdfBuffer } from "@/lib/parsers/ocr";
+import { extractPdfFormFieldText } from "@/lib/parsers/pdf-form-fields";
 
 const MAX_CHARS = 6000;
 // Below this many non-whitespace characters, a "text" PDF extraction is
@@ -29,7 +30,18 @@ export async function extractText(fileName: string, buffer: Buffer): Promise<str
       }
       const parser = new PDFParse({ data: buffer });
       const result = await parser.getText();
-      const text = result.text;
+
+      // Fillable PDF forms (F1/F3/DDJJ and similar templates filled in
+      // digitally) keep typed-in values as AcroForm field data, which never
+      // shows up in the plain content-stream text above — only the printed
+      // labels do. Fold those field values in as synthesized "label: value"
+      // lines so the same regex-based interpreters can read them.
+      // Synthesized field lines go first: they're unambiguous "label value"
+      // pairs, while the raw content-stream text may have the same labels
+      // sitting right above their (blank, un-filled-in) form field with no
+      // value at all — first-match regexes should prefer the real data.
+      const formFieldText = await extractPdfFormFieldText(buffer);
+      const text = formFieldText ? `${formFieldText}\n${result.text}` : result.text;
 
       if (text.replace(/\s/g, "").length < MIN_REAL_TEXT_CHARS) {
         // No real text layer — this PDF is a scan/photo saved as PDF.

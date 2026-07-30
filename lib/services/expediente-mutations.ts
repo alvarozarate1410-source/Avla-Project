@@ -89,6 +89,30 @@ function recomputeReadyScore(expediente: Expediente): Expediente["readyScore"] {
   return { valor, etiqueta, factores };
 }
 
+/**
+ * "Nivel de Confianza IA" reflects how confident the classifier itself was
+ * about the documents it processed — the average per-document detection
+ * confidence, excluding files it couldn't identify at all (those already
+ * show up as a documental risk, not a confidence problem).
+ */
+function recomputeConfianzaIA(expediente: Expediente): Expediente["confianzaIA"] {
+  const known = expediente.documentos.filter((d) => d.tipoDetectado !== "DESCONOCIDO");
+  if (known.length === 0) {
+    return { valor: 0, mensaje: "Expediente recién creado — procesando documentos." };
+  }
+
+  const promedio = known.reduce((acc, d) => acc + d.confianzaDeteccion, 0) / known.length;
+  const valor = Math.round(promedio * 100);
+  const mensaje =
+    valor >= 90
+      ? "Expediente listo para evaluación."
+      : valor >= 70
+        ? "Clasificación sólida — revisa los documentos marcados con advertencia."
+        : "Confianza baja — revisa manualmente los documentos con clasificación incierta.";
+
+  return { valor, mensaje };
+}
+
 function overallTono(resultados: EvidenciaResultado[]): "success" | "warning" | "danger" | "neutral" {
   if (resultados.some((r) => r.tono === "danger")) return "danger";
   if (resultados.some((r) => r.tono === "warning")) return "warning";
@@ -207,7 +231,7 @@ export function applyUploadedEvidence(expediente: Expediente, upload: ProcessedU
     actualizadoEn: now,
   };
 
-  updated = { ...updated, readyScore: recomputeReadyScore(updated) };
+  updated = { ...updated, readyScore: recomputeReadyScore(updated), confianzaIA: recomputeConfianzaIA(updated) };
 
   // "Riesgo Documental" and the executive brief's pendientes list are scoped to
   // the client/project/consortium paperwork (not external validations, which

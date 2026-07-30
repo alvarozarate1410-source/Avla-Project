@@ -38,13 +38,13 @@ function captureLine(text: string, labelPattern: RegExp, maxLen = 150): string |
 export function interpretF1(text: string): Partial<InformacionExtraida> {
   const result: Partial<InformacionExtraida> = {};
 
-  const ruc = text.match(/ruc[:\s]*n?°?\s*([0-9]{11})/i)?.[1] ?? text.match(/\b(10|15|17|20)\d{9}\b/)?.[0];
+  const ruc = text.match(/ruc[ \t:]*n?°?\s*([0-9]{11})/i)?.[1] ?? text.match(/\b(10|15|17|20)\d{9}\b/)?.[0];
   if (ruc) result.ruc = ruc;
 
-  const razonSocial = captureLine(text, /raz[oó]n\s+social[:\s]*([^\n]{3,120})/i);
+  const razonSocial = captureLine(text, /raz[oó]n\s+social[ \t:]*([^\n]{3,120})/i);
   if (razonSocial) result.razonSocial = razonSocial;
 
-  const repMatch = text.match(/representantes?\s+legales?[:\s]*([^\n]{3,200})/i);
+  const repMatch = text.match(/representantes?\s+legal(?:es)?[ \t:]*([^\n]{3,200})/i);
   if (repMatch?.[1]) {
     const names = repMatch[1]
       .split(/[,/]|(?:\s+y\s+)/i)
@@ -56,16 +56,16 @@ export function interpretF1(text: string): Partial<InformacionExtraida> {
     }
   }
 
-  const direccion = captureLine(text, /direcci[oó]n(?:\s+fiscal)?[:\s]*([^\n]{5,150})/i);
+  const direccion = captureLine(text, /direcci[oó]n(?:\s+fiscal)?[ \t:]*([^\n]{5,150})/i);
   if (direccion) result.direccion = direccion;
 
   const correo = text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)?.[0];
   if (correo) result.correo = correo;
 
-  const ciiuMatch = text.match(/ciiu[:\s]*([0-9]{4})/i);
+  const ciiuMatch = text.match(/ciiu[ \t:]*([0-9]{4})/i);
   if (ciiuMatch) result.ciiu = ciiuMatch[1];
 
-  const actividad = captureLine(text, /actividad\s+econ[oó]mica(?:\s+principal)?[:\s]*([^\n]{3,120})/i);
+  const actividad = captureLine(text, /actividad\s+econ[oó]mica(?:\s+principal)?[ \t:]*([^\n]{3,120})/i);
   if (actividad) {
     result.actividadEconomica = actividad;
     if (!ciiuMatch) {
@@ -75,7 +75,7 @@ export function interpretF1(text: string): Partial<InformacionExtraida> {
     }
   }
 
-  const patrimonio = findMoneyNear(text, /patrimonio(?:\s+neto)?[:\s]*/i, 60);
+  const patrimonio = findMoneyNear(text, /patrimonio(?:\s+neto)?[ \t:]*/i, 60);
   if (patrimonio !== null) result.patrimonio = patrimonio;
 
   // Only return something if we actually found signal — an empty object lets
@@ -92,17 +92,21 @@ export function interpretBasesIntegradas(text: string): RequerimientoInfo {
   const result: RequerimientoInfo = {};
 
   const lugar =
-    captureLine(text, /lugar\s+de\s+(?:ejecuci[oó]n|prestaci[oó]n)(?:\s+de\s+la\s+obra| del servicio)?[:\s]*([^\n]{3,150})/i) ??
-    captureLine(text, /lugar\s+de\s+la\s+obra[:\s]*([^\n]{3,150})/i);
+    captureLine(text, /lugar\s+de\s+(?:ejecuci[oó]n|prestaci[oó]n)(?:\s+de\s+la\s+obra| del servicio)?[ \t:]*([^\n]{3,150})/i) ??
+    captureLine(text, /lugar\s+de\s+la\s+obra[ \t:]*([^\n]{3,150})/i);
   if (lugar) result.lugarEjecucion = lugar;
 
-  const monto = findMoneyNear(text, /(?:monto\s+adjudicado|valor\s+referencial|valor\s+estimado)[:\s]*/i, 80);
+  const monto = findMoneyNear(text, /(?:monto\s+adjudicado|valor\s+referencial|valor\s+estimado)[ \t:]*/i, 80);
   if (monto !== null) {
     result.montoAdjudicado = monto;
     result.montoAdjudicadoFuente = "Bases Integradas";
   }
 
-  const beneficiario = captureLine(text, /beneficiario[:\s]*([^\n]{3,150})/i) ?? captureLine(text, /entidad\s+contratante[:\s]*([^\n]{3,150})/i);
+  const beneficiario =
+    captureLine(text, /beneficiario[ \t:]*([^\n]{3,150})/i) ??
+    captureLine(text, /entidad\s+(?:contratante|convocante)[ \t:]*([^\n]{3,150})/i) ??
+    captureLine(text, /(?:^|\n)\s*entidad[ \t:]*([^\n]{3,150})/i) ??
+    captureLine(text, /convocad[oa]\s+por[ \t:]*([^\n]{3,150})/i);
   if (beneficiario) result.beneficiario = beneficiario;
 
   const plazoMatch = text.match(/plazo(?:\s+de\s+ejecuci[oó]n)?[^\d]{0,30}(\d{1,4})\s*(d[ií]as?|meses)/i);
@@ -122,9 +126,9 @@ export function interpretBasesIntegradas(text: string): RequerimientoInfo {
  */
 export function extractNombreProyecto(text: string): string | undefined {
   return (
-    captureLine(text, /objeto\s+de\s+la\s+contrataci[oó]n[:\s]*([^\n]{5,150})/i) ??
-    captureLine(text, /denominaci[oó]n\s+de\s+la\s+convocatoria[:\s]*([^\n]{5,150})/i) ??
-    captureLine(text, /descripci[oó]n\s+del\s+objeto[:\s]*([^\n]{5,150})/i)
+    captureLine(text, /objeto\s+de\s+la\s+contrataci[oó]n[ \t:]*([^\n]{5,150})/i) ??
+    captureLine(text, /denominaci[oó]n\s+de\s+la\s+convocatoria[ \t:]*([^\n]{5,150})/i) ??
+    captureLine(text, /descripci[oó]n\s+del\s+objeto[ \t:]*([^\n]{5,150})/i)
   );
 }
 
@@ -132,10 +136,21 @@ export function extractNombreProyecto(text: string): string | undefined {
 export function interpretReporteBuenaPro(text: string): { montoAdjudicado?: number; beneficiario?: string } {
   const result: { montoAdjudicado?: number; beneficiario?: string } = {};
 
-  const monto = findMoneyNear(text, /(?:monto\s+adjudicado|monto\s+de\s+la\s+buena\s+pro|monto\s+total\s+adjudicado)[:\s]*/i, 80);
+  const monto = findMoneyNear(
+    text,
+    /(?:monto\s+adjudicado|monto\s+de\s+la\s+buena\s+pro|monto\s+total\s+adjudicado|monto\s+ofertado)[ \t:]*/i,
+    80
+  );
   if (monto !== null) result.montoAdjudicado = monto;
 
-  const beneficiario = captureLine(text, /(?:postor\s+ganador|adjudicatario|ganador\s+de\s+la\s+buena\s+pro)[:\s]*([^\n]{3,150})/i);
+  // "beneficiario" here means the convening entity (the buyer/client that
+  // called the process), matching how it's used everywhere else — e.g. the
+  // executive brief renders it as "convocado por {beneficiario}" — not the
+  // winning bidder/contractor, which is AVLA's own client in this workflow.
+  const beneficiario =
+    captureLine(text, /entidad\s+(?:contratante|convocante)[ \t:]*([^\n]{3,150})/i) ??
+    captureLine(text, /(?:^|\n)\s*entidad[ \t:]*([^\n]{3,150})/i) ??
+    captureLine(text, /convocad[oa]\s+por[ \t:]*([^\n]{3,150})/i);
   if (beneficiario) result.beneficiario = beneficiario;
 
   return result;
