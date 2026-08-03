@@ -12,6 +12,7 @@ import { formatBytes, cn } from "@/lib/utils";
 import { applyUploadedEvidence } from "@/lib/services/expediente-mutations";
 import { detectUploadNotifications } from "@/lib/services/notification-triggers";
 import { useNotificationsStore } from "@/lib/store/notifications-store";
+import { classifyFile, ClassifyRequestError } from "@/lib/services/classify-file";
 
 type Stage = "analizando" | "completado" | "error";
 
@@ -23,16 +24,6 @@ interface QueueItem {
   resumenIA?: string;
   errorMessage?: string;
 }
-
-// The classify route bounds itself to well under 60s (see maxDuration and
-// REQUEST_BUDGET_MS in app/api/documents/classify/route.ts) so it always
-// sends back a proper response instead of running out the clock — but
-// without a timeout on this end too, a dropped connection or unexpected
-// platform-level kill would still leave the fetch hanging forever, which
-// reads to the user as "Analizando" that never finishes. Set comfortably
-// above the server's own budget so the server's clean response/error wins
-// in the normal case.
-const CLASSIFY_TIMEOUT_MS = 70_000;
 
 const EXT_ICON: Record<string, typeof FileText> = {
   pdf: FileText,
@@ -60,21 +51,8 @@ export function AddEvidenceDialog({
       const id = `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 7)}`;
       setQueue((prev) => [...prev, { id, file, stage: "analizando" }]);
 
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("context", `${expediente.nombreProyecto} ${expediente.informacionExtraida.actividadEconomica}`);
-
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), CLASSIFY_TIMEOUT_MS);
-        let res: Response;
-        try {
-          res = await fetch("/api/documents/classify", { method: "POST", body: fd, signal: controller.signal });
-        } finally {
-          clearTimeout(timeoutId);
-        }
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Error al procesar el archivo");
+        const data = await classifyFile(file, `${expediente.nombreProyecto} ${expediente.informacionExtraida.actividadEconomica}`);
 
         setQueue((prev) =>
           prev.map((q) => (q.id === id ? { ...q, stage: "completado", tipoDetectado: data.tipoDetectado, resumenIA: data.resumenIA } : q))
@@ -102,11 +80,7 @@ export function AddEvidenceDialog({
         });
       } catch (err) {
         const errorMessage =
-          err instanceof DOMException && err.name === "AbortError"
-            ? "El documento tardó demasiado en procesarse. Intenta con un archivo más liviano o vuelve a intentarlo."
-            : err instanceof Error
-              ? err.message
-              : "Hubo un problema de conexión. Intenta nuevamente.";
+          err instanceof ClassifyRequestError || err instanceof Error ? err.message : "Hubo un problema de conexión. Intenta nuevamente.";
         setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, stage: "error", errorMessage } : q)));
       }
     },

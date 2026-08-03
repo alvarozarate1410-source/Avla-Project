@@ -10,10 +10,17 @@ import type { InformacionExtraida, RequerimientoInfo } from "@/lib/types";
 // which is far shorter than a multi-page scanned document's OCR pass can
 // legitimately take — the function gets killed mid-request with no clean
 // response sent back, which is what an upload stuck in "Procesando" forever
-// actually was. 60s comfortably covers the OCR pipeline's own internal
-// budget (lib/parsers/ocr.ts's OCR_BUDGET_MS, 45s) plus rendering/response
-// overhead. Requires a Vercel plan that allows a 60s function duration.
-export const maxDuration = 60;
+// actually was. 120s comfortably covers the OCR pipeline's own internal
+// budget (lib/parsers/ocr.ts's OCR_BUDGET_MS, 80s) plus cold-start and
+// response overhead — raised from an initial 60s/45s pair after real single
+// small documents (a 108KB PNG, an 831KB DNI PDF) still hit the timeout in
+// production, which pointed at serverless cold-start cost (Tesseract's WASM
+// worker + language model, PDFium's WASM init) as the dominant cost rather
+// than per-page work; this sandbox's dev/prod servers stay warm across every
+// test run, so that cost never showed up here. Requires a Vercel plan that
+// allows a 120s function duration — if it doesn't, Vercel enforces its own
+// plan limit regardless of this value.
+export const maxDuration = 120;
 
 // extractText() bounds its own OCR pass internally (lib/parsers/ocr.ts's
 // OCR_BUDGET_MS), but that only covers the OCR path specifically — this is
@@ -23,7 +30,7 @@ export const maxDuration = 60;
 // silently running out the clock on maxDuration and getting killed with no
 // response at all — which is what an upload stuck in "Procesando" forever
 // actually was.
-const REQUEST_BUDGET_MS = 55_000;
+const REQUEST_BUDGET_MS = 100_000;
 
 async function withRequestTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -33,16 +40,45 @@ async function withRequestTimeout<T>(promise: Promise<T>, ms: number, label: str
 }
 
 export async function POST(req: NextRequest) {
-  const formData = await req.formData().catch(() => null);
-  const file = formData?.get("file");
-  const context = formData?.get("context");
+  const contentType = req.headers.get("content-type") ?? "";
 
-  if (!file || !(file instanceof File)) {
-    return NextResponse.json({ error: "Archivo no recibido" }, { status: 400 });
+  let fileName: string;
+  let buffer: Buffer;
+  let context: string;
+
+  if (contentType.includes("application/json")) {
+    // Files over Vercel's ~4.5MB serverless request-body limit (real
+    // scanned Peruvian official documents routinely exceed this) are
+    // uploaded directly from the browser to Vercel Blob storage first (see
+    // lib/services/classify-file.ts and /api/documents/upload-token),
+    // bypassing this function's body limit entirely. This branch just
+    // fetches the bytes from that blob URL instead of receiving them in
+    // the request body.
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body.blobUrl !== "string") {
+      return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 });
+    }
+    const blobRes = await fetch(body.blobUrl).catch(() => null);
+    if (!blobRes || !blobRes.ok) {
+      return NextResponse.json({ error: "No se pudo descargar el archivo subido. Intenta de nuevo." }, { status: 502 });
+    }
+    buffer = Buffer.from(await blobRes.arrayBuffer());
+    fileName = typeof body.fileName === "string" && body.fileName ? body.fileName : "archivo";
+    context = typeof body.context === "string" ? body.context : "";
+  } else {
+    const formData = await req.formData().catch(() => null);
+    const file = formData?.get("file");
+    const rawContext = formData?.get("context");
+
+    if (!file || !(file instanceof File)) {
+      return NextResponse.json({ error: "Archivo no recibido" }, { status: 400 });
+    }
+    buffer = Buffer.from(await file.arrayBuffer());
+    fileName = file.name;
+    context = typeof rawContext === "string" ? rawContext : "";
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const extraction: ExtractionResult = await withRequestTimeout(extractText(file.name, buffer), REQUEST_BUDGET_MS, "Procesamiento del documento").catch(
+  const extraction: ExtractionResult = await withRequestTimeout(extractText(fileName, buffer), REQUEST_BUDGET_MS, "Procesamiento del documento").catch(
     (err: unknown): ExtractionResult => ({
       text: "",
       method: "unsupported",
@@ -50,7 +86,7 @@ export async function POST(req: NextRequest) {
     })
   );
   const text = extraction.text;
-  const classification = classifyDocument(file.name, text);
+  const classification = classifyDocument(fileName, text);
 
   let resultados: ReturnType<typeof interpretEvidence>["resultados"] = [];
   let resumenIA = "";
@@ -67,7 +103,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (classification.tipoDetectado === "EXPERIENCIA_SEACE") {
-    experienceMatch = analyzeSeaceWorkbook(buffer, typeof context === "string" ? context : "") ?? undefined;
+    experienceMatch = analyzeSeaceWorkbook(buffer, context) ?? undefined;
     if (experienceMatch) {
       resultados = [
         { etiqueta: "Contratos analizados", valor: String(experienceMatch.contratosAnalizados), tono: "neutral" },
@@ -129,8 +165,8 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({
-    fileName: file.name,
-    size: file.size,
+    fileName,
+    size: buffer.length,
     ...classification,
     extracto: text.slice(0, 240),
     resultados,

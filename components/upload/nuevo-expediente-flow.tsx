@@ -31,6 +31,7 @@ import { useExpedientesStore } from "@/lib/store/expedientes-store";
 import { useTemplatesStore } from "@/lib/store/templates-store";
 import { useUser } from "@/components/layout/user-context";
 import { formatBytes, cn } from "@/lib/utils";
+import { classifyFile, ClassifyRequestError } from "@/lib/services/classify-file";
 
 type Stage = "en_cola" | "procesando" | "completado" | "error";
 
@@ -41,16 +42,6 @@ interface QueueItem extends Partial<ProcessedUpload> {
   nombreProyectoSugerido?: string;
   errorMessage?: string;
 }
-
-// The classify route bounds itself to well under 60s (see maxDuration and
-// REQUEST_BUDGET_MS in app/api/documents/classify/route.ts) so it always
-// sends back a proper response instead of running out the clock — but
-// without a timeout on this end too, a genuinely dropped connection or an
-// unexpected platform-level kill would still leave the fetch hanging
-// forever, which reads to the user as "Procesando" that never finishes.
-// Set comfortably above the server's own budget so the server's clean
-// response/error wins in the normal case.
-const CLASSIFY_TIMEOUT_MS = 70_000;
 
 const EXT_ICON: Record<string, typeof FileText> = {
   pdf: FileText,
@@ -132,21 +123,7 @@ export function NuevoExpedienteFlow() {
     for (const item of pending) {
       setQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, stage: "procesando" } : q)));
       try {
-        const fd = new FormData();
-        fd.append("file", item.file);
-        fd.append("context", context);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), CLASSIFY_TIMEOUT_MS);
-        let res: Response;
-        try {
-          res = await fetch("/api/documents/classify", { method: "POST", body: fd, signal: controller.signal });
-        } finally {
-          clearTimeout(timeoutId);
-        }
-        if (!res.ok) {
-          throw new Error(`El servidor respondió con un error (${res.status}). Intenta subir el archivo de nuevo.`);
-        }
-        const data = await res.json();
+        const data = await classifyFile(item.file, context);
 
         if (data.f1Data?.razonSocial) context += ` ${data.f1Data.razonSocial}`;
         if (data.f1Data?.actividadEconomica) context += ` ${data.f1Data.actividadEconomica}`;
@@ -179,11 +156,7 @@ export function NuevoExpedienteFlow() {
         );
       } catch (err) {
         const errorMessage =
-          err instanceof DOMException && err.name === "AbortError"
-            ? "El documento tardó demasiado en procesarse. Intenta con un archivo más liviano o vuelve a intentarlo."
-            : err instanceof Error
-              ? err.message
-              : "Hubo un problema de conexión. Intenta nuevamente.";
+          err instanceof ClassifyRequestError || err instanceof Error ? err.message : "Hubo un problema de conexión. Intenta nuevamente.";
         setQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, stage: "error", errorMessage } : q)));
       }
     }

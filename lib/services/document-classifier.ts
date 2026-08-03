@@ -84,7 +84,24 @@ const RULES: Rule[] = [
     tipo: "CARTA_NOMBRAMIENTO",
     categoria: "cliente",
     nombreCanonico: "Carta_Nombramiento",
-    contentKeywords: [/carta\s+de\s+nombramiento/, "designamos como representante", "hacemos de su conocimiento que se ha designado"],
+    // Broadened defensively (no real failing sample seen yet) after a real
+    // "CARTA DE NOMBRAMIENTO.pdf" extracted text fine but matched none of
+    // the 3 original keywords — the letter's actual body text apparently
+    // doesn't literally repeat its own filename/title. Covers common
+    // alternate titles and appointment-letter phrasing; if a real sample
+    // still doesn't match, that sample is what's needed to tune this
+    // precisely instead of guessing further.
+    contentKeywords: [
+      /carta\s+de\s+nombramiento/,
+      /carta\s+de\s+designaci[oó]n/,
+      /acta\s+de\s+nombramiento/,
+      "designamos como representante",
+      "hacemos de su conocimiento que se ha designado",
+      /nombramos\s+(a|como)/,
+      /queda\s+(designad[oa]|nombrad[oa])/,
+      "en calidad de representante legal",
+      "designado como representante legal",
+    ],
   },
   {
     tipo: "SOLICITUD_EMISION",

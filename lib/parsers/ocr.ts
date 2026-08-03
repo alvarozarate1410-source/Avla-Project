@@ -4,16 +4,27 @@ import type { PDFiumDocument } from "@hyzyla/pdfium";
 
 const LANG_PATH = path.join(process.cwd(), "node_modules/@tesseract.js-data/spa/4.0.0_best_int");
 const MAX_OCR_PAGES = 8;
-const OCR_TIMEOUT_MS = 15_000;
+const OCR_TIMEOUT_MS = 20_000;
 // Per-page timeouts alone don't bound total request time: render + recognize
-// are two separate 15s budgets, so 8 pages could legitimately take minutes
-// — long past any serverless function's execution limit, and with no clean
+// are two separate budgets, so 8 pages could legitimately take minutes —
+// long past any serverless function's execution limit, and with no clean
 // error sent back before the platform kills the function outright, that
 // reads to the user as an upload that hangs in "Procesando" forever. This
 // caps the *whole* multi-page OCR pass regardless of page count, so a
 // request always finishes (with a clear "ran out of time" result for
-// whatever pages didn't get processed) well inside a 60s function budget.
-const OCR_BUDGET_MS = 45_000;
+// whatever pages didn't get processed) inside the route's own budget.
+//
+// Raised from an initial 45s after real single-page documents (a 108KB PNG,
+// an 831KB DNI PDF) still hit the request-level timeout in production —
+// nothing in a single small page should take anywhere near that long to
+// *recognize*, which points at cold-start cost (Tesseract's WASM worker
+// init + its gzip'd language model load, and PDFium's own WASM init) as the
+// dominant cost, not per-page work. That cost is invisible in this sandbox
+// because its dev/prod server processes stay warm across every test run —
+// a real serverless cold start pays it on every fresh container. The timing
+// logs below exist specifically to confirm that split from real Vercel
+// function logs instead of guessing further.
+const OCR_BUDGET_MS = 80_000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let workerPromise: Promise<any> | null = null;
@@ -25,13 +36,16 @@ let workerPromise: Promise<any> | null = null;
  */
 function getWorker() {
   if (!workerPromise) {
+    const t0 = Date.now();
     workerPromise = (async () => {
       const Tesseract = await import("tesseract.js");
-      return Tesseract.createWorker("spa", 1, {
+      const worker = await Tesseract.createWorker("spa", 1, {
         langPath: LANG_PATH,
         gzip: true,
         cachePath: path.join(os.tmpdir(), "avla-nexus-tesseract-cache"),
       });
+      console.log(`[avla-nexus] OCR: tesseract worker cold start took ${Date.now() - t0}ms`);
+      return worker;
     })();
   }
   return workerPromise;
@@ -61,7 +75,9 @@ export interface OcrResult {
 export async function ocrImageBuffer(buffer: Buffer, timeoutMs: number = OCR_TIMEOUT_MS): Promise<OcrResult> {
   try {
     const worker = await getWorker();
+    const t0 = Date.now();
     const { data } = await withTimeout<{ data: { text: string } }>(worker.recognize(buffer), timeoutMs, "OCR de imagen");
+    console.log(`[avla-nexus] OCR: recognize() took ${Date.now() - t0}ms`);
     return { text: data.text ?? "" };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -86,9 +102,12 @@ let pdfiumLibraryPromise: Promise<any> | null = null;
  */
 function getPdfium() {
   if (!pdfiumLibraryPromise) {
+    const t0 = Date.now();
     pdfiumLibraryPromise = (async () => {
       const { PDFiumLibrary } = await import("@hyzyla/pdfium");
-      return PDFiumLibrary.init();
+      const library = await PDFiumLibrary.init();
+      console.log(`[avla-nexus] OCR: pdfium cold start took ${Date.now() - t0}ms`);
+      return library;
     })();
   }
   return pdfiumLibraryPromise;
@@ -113,7 +132,16 @@ export interface PageOcrResult {
  */
 export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promise<PageOcrResult[]> {
   const targets = pageIndices.slice(0, MAX_OCR_PAGES);
-  const deadline = Date.now() + OCR_BUDGET_MS;
+  const t0 = Date.now();
+  const deadline = t0 + OCR_BUDGET_MS;
+  // PDFium's WASM init and Tesseract's worker+language-model init are two
+  // independent cold starts — kicking the worker off here, concurrently
+  // with PDFium below, lets them overlap instead of stacking sequentially
+  // (which is what happened before: PDFium loaded first, and the worker
+  // only started its own cold start lazily once the *first* page's render
+  // had already finished, paying both costs back to back).
+  void getWorker();
+
   let document: PDFiumDocument | undefined;
   try {
     const library = await getPdfium();
@@ -128,6 +156,7 @@ export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promis
       // left to plausibly finish it, rather than starting it and getting cut
       // off mid-render/mid-recognize by the function's own hard timeout.
       if (remaining < 3_000) {
+        console.log(`[avla-nexus] OCR: page ${pageIndex + 1} skipped, budget exhausted at +${Date.now() - t0}ms`);
         results.push({
           pageIndex,
           text: "",
@@ -140,6 +169,7 @@ export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promis
       try {
         const page = doc.getPage(pageIndex);
         const renderBudget = Math.min(OCR_TIMEOUT_MS, remaining);
+        const renderStart = Date.now();
         const image = await withTimeout<{ data: Uint8Array }>(
           page.render({
             // Scale 2 (~144dpi) reliably garbles small embedded content —
@@ -158,8 +188,10 @@ export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promis
           renderBudget,
           `Renderizado de página ${pageIndex + 1}`
         );
+        console.log(`[avla-nexus] OCR: page ${pageIndex + 1} render took ${Date.now() - renderStart}ms (elapsed +${Date.now() - t0}ms)`);
         const recognizeBudget = Math.min(OCR_TIMEOUT_MS, Math.max(1_000, deadline - Date.now()));
         const ocr = await ocrImageBuffer(Buffer.from(image.data), recognizeBudget);
+        console.log(`[avla-nexus] OCR: page ${pageIndex + 1} done, elapsed +${Date.now() - t0}ms`);
         results.push({ pageIndex, text: ocr.text, error: ocr.error });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
