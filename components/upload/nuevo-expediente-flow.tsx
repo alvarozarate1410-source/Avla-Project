@@ -113,14 +113,25 @@ export function NuevoExpedienteFlow() {
 
   async function processQueue() {
     setRunning(true);
-    // Sequential (not parallel) so each file's project-name/actividad guess
-    // can enrich the SEACE keyword-matching context for files processed
-    // after it — the classify route's "context" field only helps if we
-    // already know something about the project by the time we reach it.
+    // Files are started one after another (not all at once) so each file's
+    // project-name/actividad guess can enrich the SEACE keyword-matching
+    // context for files started after it — the classify route's "context"
+    // field only helps if we already know something about the project by
+    // the time we reach it. But a slow file must never block the ones
+    // behind it: each file's own classifyFile() call already carries its
+    // own independent timeout, so instead of fully awaiting one file before
+    // starting the next, we only wait up to STAGGER_MS for it — long enough
+    // for a typical file to finish and hand its context to the next one,
+    // short enough that one unusually slow document (a multi-page scan
+    // needing heavy OCR) can't stall the rest of the batch behind it. A
+    // document that's slower than that just finishes context-less for
+    // whichever files started before it did, in the background, on its own
+    // clock — it still updates its own row when it settles.
+    const STAGGER_MS = 20_000;
     let context = "";
     const pending = queue.filter((q) => q.stage === "en_cola");
 
-    for (const item of pending) {
+    const runOne = async (item: (typeof pending)[number]) => {
       setQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, stage: "procesando" } : q)));
       try {
         const data = await classifyFile(item.file, context);
@@ -159,7 +170,18 @@ export function NuevoExpedienteFlow() {
           err instanceof ClassifyRequestError || err instanceof Error ? err.message : "Hubo un problema de conexión. Intenta nuevamente.";
         setQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, stage: "error", errorMessage } : q)));
       }
+    };
+
+    const inFlight: Promise<void>[] = [];
+    for (const item of pending) {
+      const p = runOne(item);
+      inFlight.push(p);
+      await Promise.race([p, new Promise((resolve) => setTimeout(resolve, STAGGER_MS))]);
     }
+    // Every file has at least started by now; wait for whichever ones are
+    // still running (started late, or genuinely slow) before declaring the
+    // batch done, so the UI's "running" state reflects true completion.
+    await Promise.allSettled(inFlight);
 
     setRunning(false);
   }
