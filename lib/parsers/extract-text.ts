@@ -1,7 +1,7 @@
-import path from "node:path";
 import * as XLSX from "xlsx";
 import { ocrImageBuffer, ocrPdfPages } from "@/lib/parsers/ocr";
 import { extractPdfFormFieldText } from "@/lib/parsers/pdf-form-fields";
+import { getPdfjs } from "@/lib/parsers/pdfjs";
 
 const MAX_CHARS = 6000;
 // Below this many non-whitespace characters, a page is treated as having no
@@ -11,7 +11,54 @@ const MAX_CHARS = 6000;
 // pages that actually need it instead of the whole file or none of it.
 const MIN_REAL_TEXT_CHARS_PER_PAGE = 20;
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "bmp", "gif", "tif", "tiff"]);
-let pdfWorkerConfigured = false;
+
+interface TextItemLike {
+  str: string;
+  hasEOL?: boolean;
+  transform?: number[];
+  width?: number;
+}
+
+/**
+ * pdfjs's getTextContent() doesn't hand back ready-to-read lines — it's a
+ * flat list of positioned text runs, and it splits a single word into
+ * adjacent runs whenever the run's style changes mid-word (seen on real
+ * documents: a stray font/kerning break turned "Avla" into two runs, "A"
+ * and "vla"). Always inserting a space between runs glues a phantom space
+ * into words like that; never inserting one glues genuinely separate words
+ * together. Comparing each run's start x to the previous run's *measured*
+ * end x (its own transform + width, not just accumulated guesswork) is
+ * what actually distinguishes "next run starts where this one ended" (same
+ * word, no space) from "next run starts further right" (real gap, space).
+ */
+function joinPageTextItems(items: TextItemLike[]): string {
+  let text = "";
+  let prevEndX: number | null = null;
+  let prevY: number | null = null;
+
+  for (const item of items) {
+    if (typeof item.str !== "string" || !item.str) continue;
+    const [, , , , x, y] = item.transform ?? [];
+
+    if (typeof x === "number" && typeof y === "number" && prevY !== null && prevEndX !== null && Math.abs(y - prevY) < 2) {
+      if (x - prevEndX > 1) text += " ";
+    } else if (text && !/[\s\n]$/.test(text)) {
+      text += " ";
+    }
+
+    text += item.str;
+    prevEndX = typeof x === "number" ? x + (item.width ?? 0) : null;
+    prevY = typeof y === "number" ? y : null;
+
+    if (item.hasEOL) {
+      text += "\n";
+      prevEndX = null;
+      prevY = null;
+    }
+  }
+
+  return text;
+}
 
 export type ExtractionMethod = "pdf-text" | "pdf-ocr" | "pdf-mixed" | "image-ocr" | "docx" | "xlsx" | "empty" | "unsupported";
 
@@ -44,17 +91,25 @@ export async function extractText(fileName: string, buffer: Buffer): Promise<Ext
   if (ext === "pdf") {
     let pages: { num: number; text: string }[];
     try {
-      const { PDFParse } = await import("pdf-parse");
-      if (!pdfWorkerConfigured) {
-        // pdfjs-dist's default worker auto-discovery resolves to a bundler chunk
-        // path that doesn't exist under Turbopack/webpack server builds. Pointing
-        // it at the on-disk worker file avoids "fake worker" resolution failures.
-        PDFParse.setWorker(path.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs"));
-        pdfWorkerConfigured = true;
+      // Extracted directly via pdfjs-dist's getTextContent() — not the
+      // `pdf-parse` package, whose bundled pdfjs copy additionally builds a
+      // full render operator list (for its image-extraction feature) that
+      // pulls in DOMMatrix/Path2D/ImageData through an optional
+      // @napi-rs/canvas polyfill it self-detects with a dynamic require().
+      // That require is invisible to Vercel's file tracer, so its native
+      // binary silently doesn't ship in production even though it resolves
+      // fine locally — confirmed by two rounds of "DOMMatrix is not
+      // defined" crashes that only ever reproduced on Vercel.
+      // getTextContent() walks the text-showing operators directly and
+      // never touches canvas/rendering machinery at all.
+      const pdfjsLib = await getPdfjs();
+      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+      pages = [];
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        pages.push({ num: i, text: joinPageTextItems(content.items as TextItemLike[]) });
       }
-      const parser = new PDFParse({ data: buffer });
-      const result = await parser.getText();
-      pages = result.pages;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[avla-nexus] PDF parsing failed for ${fileName}:`, err);

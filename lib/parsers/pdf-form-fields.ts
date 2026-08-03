@@ -1,4 +1,4 @@
-import path from "node:path";
+import { getPdfjs } from "@/lib/parsers/pdfjs";
 
 interface TextItemLike {
   str: string;
@@ -12,12 +12,10 @@ interface FieldEntry {
   type?: string;
 }
 
-let workerConfigured = false;
-
 /**
  * Fillable PDF forms (F1/F3/DDJJ and similar templates filled digitally)
  * keep the typed-in values as AcroForm field data, not as regular text in
- * the page's content stream — pdf-parse (and any plain text extraction)
+ * the page's content stream — plain text extraction (getTextContent())
  * only sees the printed labels, never what was actually typed into the
  * fields. That silently produced empty extraction on real F1 documents
  * even though classification worked fine (the labels alone are enough to
@@ -31,12 +29,7 @@ let workerConfigured = false;
  */
 export async function extractPdfFormFieldText(buffer: Buffer): Promise<string> {
   try {
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    if (!workerConfigured) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = path.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs");
-      workerConfigured = true;
-    }
-
+    const pdfjsLib = await getPdfjs();
     const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
     const fieldsByName = (await doc.getFieldObjects()) as Record<string, FieldEntry[]> | null;
     if (!fieldsByName) return "";
