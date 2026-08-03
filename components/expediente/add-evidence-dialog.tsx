@@ -21,7 +21,18 @@ interface QueueItem {
   stage: Stage;
   tipoDetectado?: TipoDocumentoDetectado;
   resumenIA?: string;
+  errorMessage?: string;
 }
+
+// The classify route bounds itself to well under 60s (see maxDuration and
+// REQUEST_BUDGET_MS in app/api/documents/classify/route.ts) so it always
+// sends back a proper response instead of running out the clock — but
+// without a timeout on this end too, a dropped connection or unexpected
+// platform-level kill would still leave the fetch hanging forever, which
+// reads to the user as "Analizando" that never finishes. Set comfortably
+// above the server's own budget so the server's clean response/error wins
+// in the normal case.
+const CLASSIFY_TIMEOUT_MS = 70_000;
 
 const EXT_ICON: Record<string, typeof FileText> = {
   pdf: FileText,
@@ -54,7 +65,14 @@ export function AddEvidenceDialog({
       fd.append("context", `${expediente.nombreProyecto} ${expediente.informacionExtraida.actividadEconomica}`);
 
       try {
-        const res = await fetch("/api/documents/classify", { method: "POST", body: fd });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CLASSIFY_TIMEOUT_MS);
+        let res: Response;
+        try {
+          res = await fetch("/api/documents/classify", { method: "POST", body: fd, signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Error al procesar el archivo");
 
@@ -82,8 +100,14 @@ export function AddEvidenceDialog({
           for (const notification of detectUploadNotifications(prev, next)) pushNotification(notification);
           return next;
         });
-      } catch {
-        setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, stage: "error" } : q)));
+      } catch (err) {
+        const errorMessage =
+          err instanceof DOMException && err.name === "AbortError"
+            ? "El documento tardó demasiado en procesarse. Intenta con un archivo más liviano o vuelve a intentarlo."
+            : err instanceof Error
+              ? err.message
+              : "Hubo un problema de conexión. Intenta nuevamente.";
+        setQueue((prev) => prev.map((q) => (q.id === id ? { ...q, stage: "error", errorMessage } : q)));
       }
     },
     [expediente.nombreProyecto, expediente.informacionExtraida.actividadEconomica, onExpedienteChange, pushNotification]
@@ -156,6 +180,11 @@ export function AddEvidenceDialog({
                     {item.stage === "completado" && item.resumenIA && (
                       <p className="mt-2 border-t border-[var(--border-soft)] pt-2 text-[11px] leading-relaxed text-[var(--muted)]">
                         {item.resumenIA}
+                      </p>
+                    )}
+                    {item.stage === "error" && item.errorMessage && (
+                      <p className="mt-2 border-t border-[var(--border-soft)] pt-2 text-[11px] leading-relaxed text-[var(--danger)]">
+                        {item.errorMessage}
                       </p>
                     )}
                   </motion.li>

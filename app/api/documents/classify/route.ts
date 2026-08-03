@@ -1,10 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractText } from "@/lib/parsers/extract-text";
+import { extractText, type ExtractionResult } from "@/lib/parsers/extract-text";
 import { classifyDocument } from "@/lib/services/document-classifier";
 import { interpretEvidence } from "@/lib/services/evidence-interpreter";
 import { analyzeSeaceWorkbook } from "@/lib/parsers/parse-seace-excel";
 import { interpretF1, interpretBasesIntegradas, interpretReporteBuenaPro, extractNombreProyecto } from "@/lib/services/proyecto-interpreter";
 import type { InformacionExtraida, RequerimientoInfo } from "@/lib/types";
+
+// Without this, Vercel runs the route under its platform default duration,
+// which is far shorter than a multi-page scanned document's OCR pass can
+// legitimately take — the function gets killed mid-request with no clean
+// response sent back, which is what an upload stuck in "Procesando" forever
+// actually was. 60s comfortably covers the OCR pipeline's own internal
+// budget (lib/parsers/ocr.ts's OCR_BUDGET_MS, 45s) plus rendering/response
+// overhead. Requires a Vercel plan that allows a 60s function duration.
+export const maxDuration = 60;
+
+// extractText() bounds its own OCR pass internally (lib/parsers/ocr.ts's
+// OCR_BUDGET_MS), but that only covers the OCR path specifically — this is
+// a last-resort backstop for any other way text extraction could stall
+// (e.g. pdfjs's own parser spinning on a malformed or adversarial PDF), so
+// this route always returns a clean, specific JSON error instead of
+// silently running out the clock on maxDuration and getting killed with no
+// response at all — which is what an upload stuck in "Procesando" forever
+// actually was.
+const REQUEST_BUDGET_MS = 55_000;
+
+async function withRequestTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${label}: tiempo de espera agotado (${Math.round(ms / 1000)}s)`)), ms)),
+  ]);
+}
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData().catch(() => null);
@@ -16,7 +42,13 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const extraction = await extractText(file.name, buffer);
+  const extraction: ExtractionResult = await withRequestTimeout(extractText(file.name, buffer), REQUEST_BUDGET_MS, "Procesamiento del documento").catch(
+    (err: unknown): ExtractionResult => ({
+      text: "",
+      method: "unsupported",
+      error: err instanceof Error ? err.message : String(err),
+    })
+  );
   const text = extraction.text;
   const classification = classifyDocument(file.name, text);
 

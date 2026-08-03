@@ -39,7 +39,18 @@ interface QueueItem extends Partial<ProcessedUpload> {
   file: File;
   stage: Stage;
   nombreProyectoSugerido?: string;
+  errorMessage?: string;
 }
+
+// The classify route bounds itself to well under 60s (see maxDuration and
+// REQUEST_BUDGET_MS in app/api/documents/classify/route.ts) so it always
+// sends back a proper response instead of running out the clock — but
+// without a timeout on this end too, a genuinely dropped connection or an
+// unexpected platform-level kill would still leave the fetch hanging
+// forever, which reads to the user as "Procesando" that never finishes.
+// Set comfortably above the server's own budget so the server's clean
+// response/error wins in the normal case.
+const CLASSIFY_TIMEOUT_MS = 70_000;
 
 const EXT_ICON: Record<string, typeof FileText> = {
   pdf: FileText,
@@ -124,7 +135,17 @@ export function NuevoExpedienteFlow() {
         const fd = new FormData();
         fd.append("file", item.file);
         fd.append("context", context);
-        const res = await fetch("/api/documents/classify", { method: "POST", body: fd });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CLASSIFY_TIMEOUT_MS);
+        let res: Response;
+        try {
+          res = await fetch("/api/documents/classify", { method: "POST", body: fd, signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+        if (!res.ok) {
+          throw new Error(`El servidor respondió con un error (${res.status}). Intenta subir el archivo de nuevo.`);
+        }
         const data = await res.json();
 
         if (data.f1Data?.razonSocial) context += ` ${data.f1Data.razonSocial}`;
@@ -156,8 +177,14 @@ export function NuevoExpedienteFlow() {
               : q
           )
         );
-      } catch {
-        setQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, stage: "error" } : q)));
+      } catch (err) {
+        const errorMessage =
+          err instanceof DOMException && err.name === "AbortError"
+            ? "El documento tardó demasiado en procesarse. Intenta con un archivo más liviano o vuelve a intentarlo."
+            : err instanceof Error
+              ? err.message
+              : "Hubo un problema de conexión. Intenta nuevamente.";
+        setQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, stage: "error", errorMessage } : q)));
       }
     }
 
@@ -332,7 +359,13 @@ export function NuevoExpedienteFlow() {
                           <Icon className="h-4 w-4 shrink-0 text-[var(--muted)]" />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-[12.5px] font-medium">{item.file.name}</p>
-                            <p className="text-[10.5px] text-[var(--muted)]">{formatBytes(item.file.size)}</p>
+                            <p className="text-[10.5px] text-[var(--muted)]">
+                              {item.stage === "error" && item.errorMessage ? (
+                                <span className="text-[var(--danger)]">{item.errorMessage}</span>
+                              ) : (
+                                formatBytes(item.file.size)
+                              )}
+                            </p>
                           </div>
                           <StageBadge item={item} />
                         </motion.li>

@@ -4,7 +4,16 @@ import type { PDFiumDocument } from "@hyzyla/pdfium";
 
 const LANG_PATH = path.join(process.cwd(), "node_modules/@tesseract.js-data/spa/4.0.0_best_int");
 const MAX_OCR_PAGES = 8;
-const OCR_TIMEOUT_MS = 25_000;
+const OCR_TIMEOUT_MS = 15_000;
+// Per-page timeouts alone don't bound total request time: render + recognize
+// are two separate 15s budgets, so 8 pages could legitimately take minutes
+// — long past any serverless function's execution limit, and with no clean
+// error sent back before the platform kills the function outright, that
+// reads to the user as an upload that hangs in "Procesando" forever. This
+// caps the *whole* multi-page OCR pass regardless of page count, so a
+// request always finishes (with a clear "ran out of time" result for
+// whatever pages didn't get processed) well inside a 60s function budget.
+const OCR_BUDGET_MS = 45_000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let workerPromise: Promise<any> | null = null;
@@ -49,10 +58,10 @@ export interface OcrResult {
   error?: string;
 }
 
-export async function ocrImageBuffer(buffer: Buffer): Promise<OcrResult> {
+export async function ocrImageBuffer(buffer: Buffer, timeoutMs: number = OCR_TIMEOUT_MS): Promise<OcrResult> {
   try {
     const worker = await getWorker();
-    const { data } = await withTimeout<{ data: { text: string } }>(worker.recognize(buffer), OCR_TIMEOUT_MS, "OCR de imagen");
+    const { data } = await withTimeout<{ data: { text: string } }>(worker.recognize(buffer), timeoutMs, "OCR de imagen");
     return { text: data.text ?? "" };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -89,17 +98,22 @@ export interface PageOcrResult {
   pageIndex: number;
   text: string;
   error?: string;
+  /** True if this page was never attempted because the overall OCR time budget ran out first. */
+  skippedByBudget?: boolean;
 }
 
 /**
  * OCRs only the given (0-based) page indices of a PDF — used so a document
  * that mixes real text pages with scanned/image pages only pays the OCR
  * cost for the pages that actually need it, instead of the whole file.
- * Bounded to MAX_OCR_PAGES so one huge scanned bundle can't stall a request
- * indefinitely.
+ * Bounded to MAX_OCR_PAGES *and* to OCR_BUDGET_MS of total wall-clock time —
+ * a page count cap alone doesn't stop a handful of slow-to-render or
+ * slow-to-recognize pages from still blowing well past a serverless
+ * function's execution limit.
  */
 export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promise<PageOcrResult[]> {
   const targets = pageIndices.slice(0, MAX_OCR_PAGES);
+  const deadline = Date.now() + OCR_BUDGET_MS;
   let document: PDFiumDocument | undefined;
   try {
     const library = await getPdfium();
@@ -109,8 +123,23 @@ export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promis
 
     const results: PageOcrResult[] = [];
     for (const pageIndex of targets) {
+      const remaining = deadline - Date.now();
+      // Bail out before even starting a page once there's too little budget
+      // left to plausibly finish it, rather than starting it and getting cut
+      // off mid-render/mid-recognize by the function's own hard timeout.
+      if (remaining < 3_000) {
+        results.push({
+          pageIndex,
+          text: "",
+          error: "No se alcanzó a procesar por límite de tiempo.",
+          skippedByBudget: true,
+        });
+        continue;
+      }
+
       try {
         const page = doc.getPage(pageIndex);
+        const renderBudget = Math.min(OCR_TIMEOUT_MS, remaining);
         const image = await withTimeout<{ data: Uint8Array }>(
           page.render({
             // Scale 2 (~144dpi) reliably garbles small embedded content —
@@ -126,10 +155,11 @@ export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promis
                 .png()
                 .toBuffer(),
           }),
-          OCR_TIMEOUT_MS,
+          renderBudget,
           `Renderizado de página ${pageIndex + 1}`
         );
-        const ocr = await ocrImageBuffer(Buffer.from(image.data));
+        const recognizeBudget = Math.min(OCR_TIMEOUT_MS, Math.max(1_000, deadline - Date.now()));
+        const ocr = await ocrImageBuffer(Buffer.from(image.data), recognizeBudget);
         results.push({ pageIndex, text: ocr.text, error: ocr.error });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
