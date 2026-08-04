@@ -54,7 +54,7 @@ export function LoginForm() {
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl brand-gradient text-white shadow-[0_8px_24px_-8px_var(--brand)]">
-            <AvlaMark className="text-2xl" />
+            <AvlaMark className="h-6 w-6" />
           </div>
           <h1 className="text-xl font-semibold tracking-tight">AVLA NEXUS</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">Commercial Intelligence Workspace</p>

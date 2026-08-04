@@ -5,7 +5,21 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AvlaMark } from "@/components/brand/avla-mark";
 import { playChime } from "@/lib/audio/chime";
 
-const VISIBLE_MS = 1300;
+// The logo's bounce-in overshoots and lands at this offset into its own
+// animation (see the `times` array below) — the chime and the particle
+// burst both fire here so the "impact" is felt, heard, and seen at once.
+const IMPACT_MS = 260;
+const BOUNCE_MS = 620;
+// How long the logo sits fully still after landing before the whole
+// screen starts fading out — brief on purpose, just long enough to register.
+const SETTLE_MS = 520;
+const VISIBLE_MS = BOUNCE_MS + SETTLE_MS;
+
+const PARTICLE_COUNT = 8;
+const PARTICLES = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+  const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
+  return { dx: Math.cos(angle) * 40, dy: Math.sin(angle) * 40, delay: (i % 3) * 0.025 };
+});
 
 /**
  * Shown once per full page load (mounted at the root layout, which React
@@ -17,9 +31,12 @@ export function SplashScreen() {
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    playChime();
-    const timer = setTimeout(() => setVisible(false), VISIBLE_MS);
-    return () => clearTimeout(timer);
+    const chimeTimer = setTimeout(playChime, IMPACT_MS);
+    const hideTimer = setTimeout(() => setVisible(false), VISIBLE_MS);
+    return () => {
+      clearTimeout(chimeTimer);
+      clearTimeout(hideTimer);
+    };
   }, []);
 
   return (
@@ -47,37 +64,63 @@ export function SplashScreen() {
             }}
           />
 
-          <motion.div
-            initial={{ scale: 0.85, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="relative z-10 flex flex-col items-center gap-5"
-          >
-            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_20px_60px_-20px_rgba(1,113,206,0.55)] backdrop-blur-xl">
-              <span className="animate-pulse-ring absolute inset-0 rounded-2xl" />
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl brand-gradient text-white">
-                <AvlaMark className="text-xl" />
-              </div>
+          <div className="relative z-10 flex flex-col items-center gap-5">
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              {PARTICLES.map((p, i) => (
+                <motion.span
+                  key={i}
+                  className="absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-[#5cb8ff]"
+                  initial={{ opacity: 0, scale: 0, x: 0, y: 0 }}
+                  animate={{ opacity: [0, 1, 0], scale: [0, 1, 0.4], x: p.dx, y: p.dy }}
+                  transition={{ duration: 0.55, delay: IMPACT_MS / 1000 + p.delay, ease: "easeOut" }}
+                />
+              ))}
+
+              <motion.div
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: [0, 1.18, 0.92, 1.04, 1], opacity: 1 }}
+                transition={{
+                  duration: BOUNCE_MS / 1000,
+                  times: [0, 0.42, 0.64, 0.85, 1],
+                  ease: ["easeOut", "easeInOut", "easeInOut", "easeOut"],
+                }}
+                className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_20px_60px_-20px_rgba(1,113,206,0.55)] backdrop-blur-xl"
+              >
+                <span className="animate-pulse-ring absolute inset-0 rounded-2xl" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl brand-gradient text-white">
+                  <AvlaMark className="h-5 w-5" />
+                </div>
+              </motion.div>
             </div>
 
-            <div className="flex flex-col items-center gap-1.5 text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: IMPACT_MS / 1000 + 0.05, ease: "easeOut" }}
+              className="flex flex-col items-center gap-1.5 text-center"
+            >
               <p className="font-[var(--font-brand)] text-2xl font-bold uppercase tracking-[0.08em] text-white">
                 AVLA <span className="brand-gradient-text">NEXUS</span>
               </p>
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/40">
                 Commercial Intelligence Workspace
               </p>
-            </div>
+            </motion.div>
 
-            <div className="mt-1 h-[3px] w-32 overflow-hidden rounded-full bg-white/10">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3, delay: IMPACT_MS / 1000 + 0.15 }}
+              className="mt-1 h-[3px] w-32 overflow-hidden rounded-full bg-white/10"
+            >
               <motion.div
                 initial={{ x: "-100%" }}
                 animate={{ x: "100%" }}
                 transition={{ duration: 1.1, ease: "easeInOut", repeat: Infinity }}
                 className="h-full w-1/2 rounded-full brand-gradient"
               />
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

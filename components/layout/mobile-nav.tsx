@@ -38,7 +38,7 @@ export function MobileNav() {
         <DialogTitle className="sr-only">Menú de navegación</DialogTitle>
         <div className="flex h-16 items-center gap-2 border-b border-[var(--border)] px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg brand-gradient text-white">
-            <AvlaMark className="text-base" />
+            <AvlaMark className="h-4 w-4" />
           </div>
           <span className="text-[15px] font-semibold tracking-tight">AVLA NEXUS</span>
         </div>
