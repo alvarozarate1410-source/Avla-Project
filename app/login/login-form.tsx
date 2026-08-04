@@ -3,10 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Sparkles, AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { AvlaMark } from "@/components/brand/avla-mark";
 
 const DEMO_USERS = [
   { username: "mariana.torres", password: "avla2026", rol: "Ejecutivo Comercial" },
@@ -53,7 +54,7 @@ export function LoginForm() {
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl brand-gradient text-white shadow-[0_8px_24px_-8px_var(--brand)]">
-            <Sparkles className="h-6 w-6" />
+            <AvlaMark className="text-2xl" />
           </div>
           <h1 className="text-xl font-semibold tracking-tight">AVLA NEXUS</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">Commercial Intelligence Workspace</p>

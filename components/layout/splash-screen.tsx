@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Sparkles } from "lucide-react";
+import { AvlaMark } from "@/components/brand/avla-mark";
 import { playChime } from "@/lib/audio/chime";
 
 const VISIBLE_MS = 1300;
@@ -36,7 +36,7 @@ export function SplashScreen() {
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                "radial-gradient(circle at 20% 15%, rgba(109,94,248,0.22), transparent 45%), radial-gradient(circle at 82% 75%, rgba(79,140,255,0.18), transparent 45%)",
+                "radial-gradient(circle at 20% 15%, rgba(1,113,206,0.22), transparent 45%), radial-gradient(circle at 82% 75%, rgba(63,169,255,0.18), transparent 45%)",
             }}
           />
           <div
@@ -53,10 +53,10 @@ export function SplashScreen() {
             transition={{ duration: 0.5, ease: "easeOut" }}
             className="relative z-10 flex flex-col items-center gap-5"
           >
-            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_20px_60px_-20px_rgba(109,94,248,0.55)] backdrop-blur-xl">
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_20px_60px_-20px_rgba(1,113,206,0.55)] backdrop-blur-xl">
               <span className="animate-pulse-ring absolute inset-0 rounded-2xl" />
               <div className="flex h-11 w-11 items-center justify-center rounded-xl brand-gradient text-white">
-                <Sparkles className="h-5 w-5" />
+                <AvlaMark className="text-xl" />
               </div>
             </div>
 

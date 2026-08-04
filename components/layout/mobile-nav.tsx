@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, Plus, Sparkles, LogOut } from "lucide-react";
+import { Menu, Plus, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AvlaMark } from "@/components/brand/avla-mark";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NAV_ITEMS } from "@/lib/nav-items";
@@ -37,7 +38,7 @@ export function MobileNav() {
         <DialogTitle className="sr-only">Menú de navegación</DialogTitle>
         <div className="flex h-16 items-center gap-2 border-b border-[var(--border)] px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg brand-gradient text-white">
-            <Sparkles className="h-4 w-4" />
+            <AvlaMark className="text-base" />
           </div>
           <span className="text-[15px] font-semibold tracking-tight">AVLA NEXUS</span>
         </div>

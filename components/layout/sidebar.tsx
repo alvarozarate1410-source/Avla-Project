@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { Plus, PanelLeftClose, PanelLeft, Sparkles, LogOut, Settings2 } from "lucide-react";
+import { Plus, PanelLeftClose, PanelLeft, LogOut, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AvlaMark } from "@/components/brand/avla-mark";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -56,7 +57,7 @@ export function Sidebar() {
       <div className="flex h-16 items-center justify-between px-4">
         <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg brand-gradient text-white shadow-[0_4px_14px_-4px_var(--brand)]">
-            <Sparkles className="h-4 w-4" />
+            <AvlaMark className="text-base" />
           </div>
           {!collapsed && (
             <span className="truncate text-[15px] font-semibold tracking-tight">AVLA NEXUS</span>
