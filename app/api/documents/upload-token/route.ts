@@ -1,4 +1,5 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { list } from "@vercel/blob";
 import { NextResponse } from "next/server";
 
 // Server-side half of the direct-to-Blob client upload used for files over
@@ -13,10 +14,44 @@ import { NextResponse } from "next/server";
 // BLOB_READ_WRITE_TOKEN environment variable this reads implicitly. Without
 // that setup, handleUpload throws and this route returns a clear error
 // instead of a large-file upload silently failing with no explanation.
-export async function POST(request: Request): Promise<NextResponse> {
-  const body = (await request.json()) as HandleUploadBody;
 
+// Quick self-check for whether the Blob store is actually reachable —
+// visit this route's URL directly in a browser (GET, not the POST the
+// upload flow itself uses) to confirm the BLOB_READ_WRITE_TOKEN env var is
+// both present *and* valid in seconds, instead of only finding out via a
+// full large-file upload attempt failing. `list()` (not just checking the
+// env var exists) is what actually proves the token authenticates
+// correctly against the connected store, not just that some value is set.
+export async function GET(): Promise<NextResponse> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "BLOB_READ_WRITE_TOKEN no está configurada. En el dashboard de Vercel: Storage → crea o conecta un Blob Store a este proyecto (esto añade la variable automáticamente), luego vuelve a desplegar.",
+      },
+      { status: 503 }
+    );
+  }
   try {
+    await list({ limit: 1 });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `BLOB_READ_WRITE_TOKEN está configurada pero la conexión al Blob Store falló: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      },
+      { status: 503 }
+    );
+  }
+}
+
+export async function POST(request: Request): Promise<NextResponse> {
+  try {
+    const body = (await request.json()) as HandleUploadBody;
     const jsonResponse = await handleUpload({
       body,
       request,

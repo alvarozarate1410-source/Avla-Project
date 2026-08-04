@@ -16,6 +16,15 @@ const CLASSIFY_TIMEOUT_MS = 140_000;
 // 4.5MB platform limit leaves room for multipart overhead on the small path.
 const DIRECT_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
 
+// Uploading straight to Blob storage is a genuinely separate network
+// operation from the classify request that follows it (see
+// sendClassifyRequest's own, separate CLASSIFY_TIMEOUT_MS) — a stalled
+// connection here (a dropped Wi-Fi handoff, a proxy silently swallowing the
+// request, a CORS/network issue reaching Blob storage) has nothing bounding
+// how long the browser waits before giving up on its own, which is what a
+// 10-minute-long silent "hang" with no error shown actually was.
+const BLOB_UPLOAD_TIMEOUT_MS = 90_000;
+
 export class ClassifyRequestError extends Error {}
 
 /**
@@ -46,16 +55,34 @@ export async function classifyFile(file: File, context: string): Promise<any> {
 
 async function classifyLargeFile(file: File, context: string) {
   const { upload } = await import("@vercel/blob/client");
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), BLOB_UPLOAD_TIMEOUT_MS);
   let blob: { url: string };
   try {
     blob = await upload(file.name, file, {
       access: "public",
       handleUploadUrl: "/api/documents/upload-token",
+      abortSignal: controller.signal,
     });
   } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ClassifyRequestError(
+        `La subida del archivo tardó más de ${Math.round(BLOB_UPLOAD_TIMEOUT_MS / 1000)}s y se canceló. Verifica tu conexión a internet e intenta nuevamente.`
+      );
+    }
+    // "Failed to fetch" (a bare network-level failure, not an HTTP error
+    // status) can mean several different things here — a real connectivity
+    // drop, a browser extension blocking the request, or the Blob store
+    // itself not being connected to this project in Vercel yet — and
+    // there's no way to tell which from this single generic error, so the
+    // message points at all three instead of guessing one.
     throw new ClassifyRequestError(
-      err instanceof Error ? `No se pudo subir el archivo pesado: ${err.message}` : "No se pudo subir el archivo pesado. Intenta nuevamente."
+      err instanceof Error
+        ? `No se pudo subir el archivo pesado (${err.message}). Verifica tu conexión a internet; si el problema persiste, puede ser que el almacenamiento de archivos no esté configurado correctamente en el servidor.`
+        : "No se pudo subir el archivo pesado. Intenta nuevamente."
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   return sendClassifyRequest({
