@@ -7,7 +7,6 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { AvlaMark } from "@/components/brand/avla-mark";
 
 const ROLES = ["Practicante Comercial", "Ejecutivo Comercial", "Jefe Comercial"] as const;
 
@@ -58,9 +57,8 @@ export function RegisterForm() {
     <main className="noise-veil flex min-h-screen flex-1 items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl brand-gradient text-white shadow-[0_8px_24px_-8px_var(--brand)]">
-            <AvlaMark className="h-6 w-6" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand mark, next/image's optimization pipeline is unneeded overhead for a fixed 48px icon */}
+          <img src="/brand/avla-mark.png" alt="Avla" className="mb-4 h-12 w-12 rounded-2xl shadow-[0_8px_24px_-8px_var(--brand)]" />
           <h1 className="text-xl font-semibold tracking-tight">Crear cuenta</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">Únete al workspace de AVLA NEXUS</p>
         </div>

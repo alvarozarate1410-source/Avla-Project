@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AvlaMark } from "@/components/brand/avla-mark";
 import { playChime } from "@/lib/audio/chime";
 
 // The logo's bounce-in overshoots and lands at this offset into its own
@@ -87,9 +86,8 @@ export function SplashScreen() {
                 className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_20px_60px_-20px_rgba(1,113,206,0.55)] backdrop-blur-xl"
               >
                 <span className="animate-pulse-ring absolute inset-0 rounded-2xl" />
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl brand-gradient text-white">
-                  <AvlaMark className="h-5 w-5" />
-                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element -- static brand mark, next/image's optimization pipeline is unneeded overhead for a fixed 44px icon */}
+                <img src="/brand/avla-mark.png" alt="Avla" className="h-11 w-11 rounded-xl" />
               </motion.div>
             </div>
 
