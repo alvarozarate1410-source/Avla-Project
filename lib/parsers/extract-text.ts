@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { ocrImageBuffer, ocrPdfPages } from "@/lib/parsers/ocr";
 import { extractPdfFormFieldText } from "@/lib/parsers/pdf-form-fields";
 import { getPdfjs } from "@/lib/parsers/pdfjs";
+import { interpretBasesIntegradas } from "@/lib/services/proyecto-interpreter";
 
 const MAX_CHARS = 6000;
 // Below this many non-whitespace characters, a page is treated as having no
@@ -58,6 +59,32 @@ function joinPageTextItems(items: TextItemLike[]): string {
   }
 
   return text;
+}
+
+// A Bases Integradas tender document can legitimately run 90-100+ pages,
+// and often mixes native-text pages with scanned ones (signature pages,
+// stamped annexes) — OCR'ing all of them page-by-page in order would burn
+// through the OCR time budget long before ever reaching whichever page
+// happens to hold the Requerimiento section (lugar/monto/plazo/beneficiario)
+// this document type is actually needed for. Once that section has already
+// been found — whether from native text alone or after OCR'ing a handful of
+// scanned pages — there's nothing left worth spending more OCR time on, so
+// ocrPdfPages() is told to stop as soon as this is true rather than
+// continuing through the rest of a long document.
+function hasFoundRequerimiento(text: string): boolean {
+  const norm = text.toLowerCase();
+  const looksLikeBasesIntegradas = /bases integradas|requerimientos t[eé]cnicos m[ií]nimos|secci[oó]n espec[ií]fica|sistema de contrataci[oó]n/.test(
+    norm
+  );
+  if (!looksLikeBasesIntegradas) return false;
+
+  const req = interpretBasesIntegradas(text);
+  let fieldsFound = 0;
+  if (req.lugarEjecucion) fieldsFound++;
+  if (req.montoAdjudicado !== undefined) fieldsFound++;
+  if (req.beneficiario) fieldsFound++;
+  if (req.plazoValor !== undefined) fieldsFound++;
+  return fieldsFound >= 2;
 }
 
 export type ExtractionMethod = "pdf-text" | "pdf-ocr" | "pdf-mixed" | "image-ocr" | "docx" | "xlsx" | "empty" | "unsupported";
@@ -127,7 +154,11 @@ export async function extractText(fileName: string, buffer: Buffer): Promise<Ext
 
     const ocrFailures: string[] = [];
     if (pagesNeedingOcr.length > 0) {
-      const ocrResults = await ocrPdfPages(buffer, pagesNeedingOcr);
+      const needsOcrSet = new Set(pagesNeedingOcr);
+      const nativeText = pageTexts.filter((_, i) => !needsOcrSet.has(i)).join("\n");
+      const ocrResults = await ocrPdfPages(buffer, pagesNeedingOcr, {
+        shouldStop: (ocredSoFar) => hasFoundRequerimiento(`${nativeText}\n${ocredSoFar}`),
+      });
       for (const r of ocrResults) {
         pageTexts[r.pageIndex] = r.text;
         if (r.error && !r.text.trim()) ocrFailures.push(`página ${r.pageIndex + 1} (${r.error})`);

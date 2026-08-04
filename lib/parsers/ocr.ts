@@ -3,7 +3,13 @@ import path from "node:path";
 import type { PDFiumDocument } from "@hyzyla/pdfium";
 
 const LANG_PATH = path.join(process.cwd(), "node_modules/@tesseract.js-data/spa/4.0.0_best_int");
-const MAX_OCR_PAGES = 8;
+// A page-count cap alone can silently pick the *wrong* 8 pages of a large
+// scanned document — e.g. a 90-100 page Bases Integradas where the pages
+// that actually matter (the Requerimiento section) sit well past page 8.
+// OCR_BUDGET_MS below is what actually bounds total time now, so this only
+// needs to guard against a pathologically large or corrupted page count
+// report, not do the real bounding — raised accordingly.
+const MAX_OCR_PAGES = 25;
 const OCR_TIMEOUT_MS = 20_000;
 // Per-page timeouts alone don't bound total request time: render + recognize
 // are two separate budgets, so 8 pages could legitimately take minutes —
@@ -129,8 +135,20 @@ export interface PageOcrResult {
  * a page count cap alone doesn't stop a handful of slow-to-render or
  * slow-to-recognize pages from still blowing well past a serverless
  * function's execution limit.
+ *
+ * `shouldStop`, if given, is checked after every completed page against the
+ * text OCR'd so far — for a large scanned document, once whatever the
+ * caller actually needs has already been found, grinding through the
+ * remaining pages just burns time budget on content nobody's going to read.
+ * (e.g. extract-text.ts uses this so a 90+ page Bases Integradas file stops
+ * once its Requerimiento section — lugar/monto/plazo/beneficiario — has
+ * been captured, rather than OCR'ing the rest of the tender document.)
  */
-export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promise<PageOcrResult[]> {
+export async function ocrPdfPages(
+  buffer: Buffer,
+  pageIndices: number[],
+  options?: { shouldStop?: (ocredTextSoFar: string) => boolean }
+): Promise<PageOcrResult[]> {
   const targets = pageIndices.slice(0, MAX_OCR_PAGES);
   const t0 = Date.now();
   const deadline = t0 + OCR_BUDGET_MS;
@@ -193,6 +211,11 @@ export async function ocrPdfPages(buffer: Buffer, pageIndices: number[]): Promis
         const ocr = await ocrImageBuffer(Buffer.from(image.data), recognizeBudget);
         console.log(`[avla-nexus] OCR: page ${pageIndex + 1} done, elapsed +${Date.now() - t0}ms`);
         results.push({ pageIndex, text: ocr.text, error: ocr.error });
+
+        if (options?.shouldStop?.(results.map((r) => r.text).join("\n"))) {
+          console.log(`[avla-nexus] OCR: stopping early after page ${pageIndex + 1} — target content already found, elapsed +${Date.now() - t0}ms`);
+          break;
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`[avla-nexus] OCR failed for PDF page ${pageIndex + 1}:`, err);
